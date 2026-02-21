@@ -10,13 +10,13 @@ This document outlines the implementation plan for the Laundry Reconciler MVP.
 - [x] **Implement Configuration Management (CFG-001)**: Implemented `Settings` class using Pydantic.
 - [x] **Unit Tests (TEST-001)**: Implemented and passed tests for database and repositories.
 
-## Milestone 2: Import Pipeline
+## Milestone 2: Import Pipeline (Completed)
 
-- [ ] **CRM Import (IMP-001)**: Implement parser for CRM Excel/CSV files.
-- [ ] **MSWIPE Import (IMP-002)**: Implement parser for MSWIPE CSV files.
-- [ ] **Cash Register Import (IMP-003)**: Implement parser for Cash Register Excel grid.
-- [ ] **Notepad Import (IMP-004)**: Implement manual entry system.
-- [ ] **Column Mapping (IMP-005)**: Implement reusable column mapping engine.
+- [x] **CRM Import (IMP-001)**: Implemented `CRMImporter` in `src/importers/crm.py`.
+- [x] **MSWIPE Import (IMP-002)**: Implemented `MSwipeImporter` in `src/importers/mswipe.py`.
+- [x] **Cash Register Import (IMP-003)**: Implemented `CashRegisterImporter` in `src/importers/cash_register.py`.
+- [x] **Notepad Import (IMP-004)**: Implemented `NotepadService` in `src/services/notepad_service.py`.
+- [x] **Column Mapping (IMP-005)**: Implemented `MappingService` in `src/services/mapping_service.py`.
 
 ## Milestone 3: Matching Engine
 
