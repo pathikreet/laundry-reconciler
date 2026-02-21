@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "skills": {
+    "api-design-principles": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "1ee396a9c4714df95f1a9f8d156395848e8bd0fac1d70920a0487e8526ec0e55"
+    },
+    "architecture-patterns": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "11f648f7e13be442b8279c14924580ebda3bae78fb48e335b2d0d8868f75a4ac"
+    },
+    "async-python-patterns": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "94215d2e0debaeb4b09261907c2436cc47d91fe2d65e297a1dc4146b5efd24d2"
+    },
+    "code-review-excellence": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "aa718056ed922cc6ff3a29567b30af78a9265a8a415e70f0a2b71eb19608e4ae"
+    },
+    "error-handling-patterns": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "6efcf6584de527e30fe20bef36638fa02d543ee8466fcbcd98c878b636016da0"
+    },
+    "python-performance-optimization": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "05c283d97b1bc4fb033593af9d22095c716312fcc55840f2ef438a015e112865"
+    },
+    "python-testing-patterns": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "674861e37d6ca7ecdd58b910d7dd8d9703946739452d919403081b02d5607a65"
+    },
+    "sql-optimization-patterns": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "524f66088c759e2bb3120ef50a0afc480d9888c216f4c4f83d1275a56fde4acf"
+    },
+    "xlsx": {
+      "source": "vamseeachanta/workspace-hub",
+      "sourceType": "github",
+      "computedHash": "96eac642934bd89385948e4f8c5b24b4156ff69391a7602a37f304145cefb4aa"
+    }
+  }
+}
