@@ -1,0 +1,10 @@
+sqlalchemy
+pandas
+openpyxl
+xlrd
+xlsxwriter
+python-dateutil
+rapidfuzz
+pytesseract
+pydantic
+pytest
