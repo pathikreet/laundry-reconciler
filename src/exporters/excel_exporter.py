@@ -8,6 +8,15 @@ from src.models.payments import PaymentEvent
 from src.models.cash_register import CashRegisterEntry
 
 class ExcelExporter:
+    """
+    Exports reconciliation results to an Excel workbook with multiple sheets.
+
+    This exporter generates a comprehensive report containing:
+    1. Exceptions: Detailed list of all flagged issues with severity, reason, and suggested actions.
+    2. Daily Summary: Aggregated statistics for the reconciliation run.
+    3. Unmatched Notepad: Delivery entries that could not be linked to any CRM order.
+    4. Unmatched MSWIPE: Payment transactions that could not be linked to any CRM order.
+    """
     def __init__(self, db_session: Session):
         self.db = db_session
 

@@ -35,38 +35,36 @@ class CashRegisterImporter(BaseImporter):
         df = df.where(pd.notnull(df), None)
 
         # Month mapping
-        month_map = {
+        month_map_names = {
             'Jan': 1, 'Feb': 2, 'Mar': 3, 'Apr': 4, 'May': 5, 'Jun': 6,
             'Jul': 7, 'Aug': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dec': 12,
             'January': 1, 'February': 2, 'March': 3, 'April': 4, 'June': 6,
             'July': 7, 'August': 8, 'September': 9, 'October': 10, 'November': 11, 'December': 12
         }
 
-        # Iterate over columns to find months
+        # 1. Identify Month Columns (O(Cols))
+        col_month_map = {}
         for col in df.columns:
             month_str = str(col).strip()
-            # fuzzy or exact match for month
-            month = None
-            for k, v in month_map.items():
+            for k, v in month_map_names.items():
                 if k.lower() in month_str.lower():
-                    month = v
+                    col_month_map[col] = v
                     break
 
-            if not month:
+        # 2. Iterate Rows (O(Rows))
+        # Example Input Row: [1, 500, 600, ...] where 1 is Day, 500 is Jan Closing, 600 is Feb Closing
+        for idx, row in df.iterrows():
+            # Skip if day column is missing or invalid
+            try:
+                day_val = row.iloc[0]
+                day = int(float(str(day_val))) # handle '1.0'
+                if day < 1 or day > 31:
+                    continue
+            except:
                 continue
 
-            # Now iterate over rows
-            for idx, row in df.iterrows():
-                # specific logic to find the day number
-                # Assuming the first column is the day
-                try:
-                    day_val = row.iloc[0]
-                    day = int(float(str(day_val))) # handle '1.0'
-                    if day < 1 or day > 31:
-                        continue
-                except:
-                    continue
-
+            # Extract data for each identified month column
+            for col, month in col_month_map.items():
                 closing_balance = self._parse_amount(row[col])
 
                 # Check if date is valid
@@ -94,6 +92,11 @@ class CashRegisterImporter(BaseImporter):
         date_map = {d['entry_date']: d for d in sorted_data}
 
         normalized_data = []
+        # Note: This loop calculates derived values like 'derived_cash_from_orders'.
+        # While the Excel sheet is the source of truth for the *closing balance*,
+        # the database acts as the persistence store for the *reconciliation application*,
+        # allowing us to efficiently query historical balances (via the 5-day lookback)
+        # without re-parsing the entire Excel history every time a single day is reconciled.
         for row in sorted_data:
             entry_date = row['entry_date']
             closing_balance = row['closing_balance']
