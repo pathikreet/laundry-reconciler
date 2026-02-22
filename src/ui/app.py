@@ -4,7 +4,7 @@ import os
 import sys
 
 # Add project root to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
 from datetime import date
 from sqlalchemy import create_engine
@@ -27,10 +27,12 @@ DB_PATH = "laundry_reconciler.db"
 if not os.path.exists(DB_PATH):
     init_db(DB_PATH)
 
+
 def get_session():
     engine = create_engine(f"sqlite:///{DB_PATH}")
     Session = sessionmaker(bind=engine)
     return Session()
+
 
 st.set_page_config(page_title="Laundry Reconciler", layout="wide")
 
@@ -38,7 +40,9 @@ st.title("Laundry Reconciler MVP")
 
 # Sidebar
 st.sidebar.title("Navigation")
-page = st.sidebar.radio("Go to", ["Import Data", "Run Reconciliation", "View Results", "History"])
+page = st.sidebar.radio(
+    "Go to", ["Import Data", "Run Reconciliation", "View Results", "History"]
+)
 
 session = get_session()
 
@@ -46,62 +50,84 @@ if page == "Import Data":
     st.header("Import Wizard")
 
     st.subheader("1. CRM Data")
-    crm_file = st.file_uploader("Upload CRM Excel/CSV", type=['csv', 'xlsx'])
+    crm_file = st.file_uploader(
+        "Upload CRM Excel/CSV",
+        type=["csv", "xlsx"],
+        help="Upload the standard CRM export file (Excel or CSV)",
+    )
     if crm_file:
         if st.button("Import CRM"):
-            # Save temp file
-            with open("temp_crm.xlsx", "wb") as f:
-                f.write(crm_file.getbuffer())
+            with st.spinner("Importing CRM Data..."):
+                # Save temp file
+                with open("temp_crm.xlsx", "wb") as f:
+                    f.write(crm_file.getbuffer())
 
-            importer = CRMImporter(session)
-            try:
-                importer.run("temp_crm.xlsx")
-                st.success("CRM Data Imported Successfully!")
-            except Exception as e:
-                st.error(f"Error importing CRM: {e}")
+                importer = CRMImporter(session)
+                try:
+                    importer.run("temp_crm.xlsx")
+                    st.success("CRM Data Imported Successfully!")
+                except Exception as e:
+                    st.error(f"Error importing CRM: {e}")
 
     st.subheader("2. MSWIPE Data")
-    ms_file = st.file_uploader("Upload MSWIPE CSV", type=['csv', 'xlsx'])
+    ms_file = st.file_uploader(
+        "Upload MSWIPE CSV",
+        type=["csv", "xlsx"],
+        help="Upload the standard MSWIPE export file (Excel or CSV)",
+    )
     if ms_file:
         if st.button("Import MSWIPE"):
-            with open("temp_ms.csv", "wb") as f:
-                f.write(ms_file.getbuffer())
+            with st.spinner("Importing MSWIPE Data..."):
+                with open("temp_ms.csv", "wb") as f:
+                    f.write(ms_file.getbuffer())
 
-            importer = MSwipeImporter(session)
-            try:
-                importer.run("temp_ms.csv")
-                st.success("MSWIPE Data Imported Successfully!")
-            except Exception as e:
-                st.error(f"Error importing MSWIPE: {e}")
+                importer = MSwipeImporter(session)
+                try:
+                    importer.run("temp_ms.csv")
+                    st.success("MSWIPE Data Imported Successfully!")
+                except Exception as e:
+                    st.error(f"Error importing MSWIPE: {e}")
 
     st.subheader("3. Notepad Data")
-    np_file = st.file_uploader("Upload Notepad Excel/CSV", type=['csv', 'xlsx'])
+    np_file = st.file_uploader(
+        "Upload Notepad Excel/CSV",
+        type=["csv", "xlsx"],
+        help="Upload the standard Notepad export file (Excel or CSV)",
+    )
     if np_file:
         if st.button("Import Notepad"):
-            with open("temp_np.xlsx", "wb") as f:
-                f.write(np_file.getbuffer())
+            with st.spinner("Importing Notepad Data..."):
+                with open("temp_np.xlsx", "wb") as f:
+                    f.write(np_file.getbuffer())
 
-            importer = NotepadImporter(session)
-            try:
-                importer.run("temp_np.xlsx")
-                st.success("Notepad Data Imported Successfully!")
-            except Exception as e:
-                st.error(f"Error importing Notepad: {e}")
+                importer = NotepadImporter(session)
+                try:
+                    importer.run("temp_np.xlsx")
+                    st.success("Notepad Data Imported Successfully!")
+                except Exception as e:
+                    st.error(f"Error importing Notepad: {e}")
 
     st.subheader("4. Cash Register Data")
-    cr_file = st.file_uploader("Upload Cash Register Excel", type=['xlsx'])
-    year = st.number_input("Year", min_value=2000, max_value=2100, value=date.today().year)
+    cr_file = st.file_uploader(
+        "Upload Cash Register Excel",
+        type=["xlsx"],
+        help="Upload the standard Cash Register export file (Excel)",
+    )
+    year = st.number_input(
+        "Year", min_value=2000, max_value=2100, value=date.today().year
+    )
     if cr_file:
         if st.button("Import Cash Register"):
-            with open("temp_cr.xlsx", "wb") as f:
-                f.write(cr_file.getbuffer())
+            with st.spinner("Importing Cash Register Data..."):
+                with open("temp_cr.xlsx", "wb") as f:
+                    f.write(cr_file.getbuffer())
 
-            importer = CashRegisterImporter(session)
-            try:
-                importer.run("temp_cr.xlsx", year=year)
-                st.success("Cash Register Data Imported Successfully!")
-            except Exception as e:
-                st.error(f"Error importing Cash Register: {e}")
+                importer = CashRegisterImporter(session)
+                try:
+                    importer.run("temp_cr.xlsx", year=year)
+                    st.success("Cash Register Data Imported Successfully!")
+                except Exception as e:
+                    st.error(f"Error importing Cash Register: {e}")
 
 elif page == "Run Reconciliation":
     st.header("Reconciliation Engine")
@@ -109,24 +135,37 @@ elif page == "Run Reconciliation":
     run_date = st.date_input("Select Date to Reconcile", value=date.today())
 
     if st.button("Start Reconciliation"):
-        st.info("Running Matching Service...")
-        matcher = MatchingService(session)
-        matcher.match_notepad_deliveries()
-        matcher.match_mswipe_payments()
+        with st.status("Running Reconciliation Process...", expanded=True) as status:
+            st.write("Running Matching Service...")
+            matcher = MatchingService(session)
+            matcher.match_notepad_deliveries()
+            matcher.match_mswipe_payments()
+            st.write("Matching complete.")
 
-        st.info(f"Running Reconciliation for {run_date}...")
-        recon = ReconciliationService(session)
-        try:
-            run = recon.run_reconciliation(run_date)
-            st.success(f"Reconciliation Complete! Run ID: {run.id}, Status: {run.status}")
-        except Exception as e:
-            st.error(f"Reconciliation Failed: {e}")
+            st.write(f"Running Reconciliation for {run_date}...")
+            recon = ReconciliationService(session)
+            try:
+                run = recon.run_reconciliation(run_date)
+                status.update(
+                    label="Reconciliation Complete!", state="complete", expanded=False
+                )
+                st.success(
+                    f"Reconciliation Complete! Run ID: {run.id}, Status: {run.status}"
+                )
+                st.balloons()
+            except Exception as e:
+                status.update(label="Reconciliation Failed", state="error")
+                st.error(f"Reconciliation Failed: {e}")
 
 elif page == "View Results":
     st.header("Reconciliation Results")
 
     # Select Run
-    runs = session.query(ReconciliationRun).order_by(ReconciliationRun.run_date.desc()).all()
+    runs = (
+        session.query(ReconciliationRun)
+        .order_by(ReconciliationRun.run_date.desc())
+        .all()
+    )
     if not runs:
         st.warning("No runs found.")
     else:
@@ -144,19 +183,25 @@ elif page == "View Results":
 
         # Exceptions
         st.subheader("Exceptions Queue")
-        exceptions = session.query(OrderException).filter_by(reconciliation_run_id=selected_run_id).all()
+        exceptions = (
+            session.query(OrderException)
+            .filter_by(reconciliation_run_id=selected_run_id)
+            .all()
+        )
 
         if exceptions:
             ex_data = []
             for ex in exceptions:
-                ex_data.append({
-                    'Order ID': ex.order.order_number if ex.order else 'N/A',
-                    'Severity': ex.severity,
-                    'Type': ex.exception_type,
-                    'Reason': ex.reason_tags,
-                    'Action': ex.suggested_action,
-                    'Status': ex.resolution_status
-                })
+                ex_data.append(
+                    {
+                        "Order ID": ex.order.order_number if ex.order else "N/A",
+                        "Severity": ex.severity,
+                        "Type": ex.exception_type,
+                        "Reason": ex.reason_tags,
+                        "Action": ex.suggested_action,
+                        "Status": ex.resolution_status,
+                    }
+                )
             st.dataframe(pd.DataFrame(ex_data))
         else:
             st.success("No exceptions found for this run!")
@@ -172,7 +217,7 @@ elif page == "View Results":
                     label="Download Excel Report",
                     data=f,
                     file_name=output_file,
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
 
 elif page == "History":
