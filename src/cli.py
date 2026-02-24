@@ -28,26 +28,26 @@ def init_database(args):
 def import_crm(args):
     session = get_session()
     importer = CRMImporter(session)
-    importer.run(args.file)
-    print(f"Imported CRM data from {args.file}")
+    count = importer.run(args.file)
+    print(f"Imported {count} CRM records from {args.file}")
 
 def import_mswipe(args):
     session = get_session()
     importer = MSwipeImporter(session)
-    importer.run(args.file)
-    print(f"Imported MSWIPE data from {args.file}")
+    count = importer.run(args.file)
+    print(f"Imported {count} MSWIPE records from {args.file}")
 
 def import_notepad(args):
     session = get_session()
     importer = NotepadImporter(session)
-    importer.run(args.file)
-    print(f"Imported Notepad data from {args.file}")
+    count = importer.run(args.file)
+    print(f"Imported {count} Notepad records from {args.file}")
 
 def import_cash_register(args):
     session = get_session()
     importer = CashRegisterImporter(session)
-    importer.run(args.file, year=args.year)
-    print(f"Imported Cash Register data from {args.file}")
+    count = importer.run(args.file, year=args.year)
+    print(f"Imported {count} Cash Register records from {args.file}")
 
 def run_reconciliation(args):
     session = get_session()

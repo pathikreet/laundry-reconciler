@@ -52,17 +52,32 @@ if page == "Import Data":
         help="Upload the daily sales export from your CRM system."
     )
     if crm_file:
-        if st.button("Import CRM"):
-            # Save temp file
-            with open("temp_crm.xlsx", "wb") as f:
-                f.write(crm_file.getbuffer())
-
-            importer = CRMImporter(session)
+        with st.expander("Preview Data", expanded=False):
             try:
-                importer.run("temp_crm.xlsx")
-                st.success("CRM Data Imported Successfully!")
+                if crm_file.name.endswith('.csv'):
+                    df_preview = pd.read_csv(crm_file)
+                else:
+                    df_preview = pd.read_excel(crm_file)
+                st.dataframe(df_preview.head())
+                crm_file.seek(0)
             except Exception as e:
-                st.error(f"Error importing CRM: {e}")
+                st.error(f"Error reading preview: {e}")
+
+        if st.button("Import CRM", type="primary"):
+            with st.status("Importing CRM Data...", expanded=True) as status:
+                # Save temp file
+                with open("temp_crm.xlsx", "wb") as f:
+                    f.write(crm_file.getbuffer())
+
+                status.write("Processing file...")
+                importer = CRMImporter(session)
+                try:
+                    count = importer.run("temp_crm.xlsx")
+                    status.update(label=f"CRM Data Imported Successfully! ({count} records)", state="complete", expanded=False)
+                    st.success(f"CRM Data Imported Successfully! ({count} records)")
+                except Exception as e:
+                    status.update(label="Import Failed", state="error")
+                    st.error(f"Error importing CRM: {e}")
 
     st.subheader("2. MSWIPE Data")
     ms_file = st.file_uploader(
@@ -71,16 +86,31 @@ if page == "Import Data":
         help="Upload the daily payments export from MSWIPE."
     )
     if ms_file:
-        if st.button("Import MSWIPE"):
-            with open("temp_ms.csv", "wb") as f:
-                f.write(ms_file.getbuffer())
-
-            importer = MSwipeImporter(session)
+        with st.expander("Preview Data", expanded=False):
             try:
-                importer.run("temp_ms.csv")
-                st.success("MSWIPE Data Imported Successfully!")
+                if ms_file.name.endswith('.csv'):
+                    df_preview = pd.read_csv(ms_file)
+                else:
+                    df_preview = pd.read_excel(ms_file)
+                st.dataframe(df_preview.head())
+                ms_file.seek(0)
             except Exception as e:
-                st.error(f"Error importing MSWIPE: {e}")
+                st.error(f"Error reading preview: {e}")
+
+        if st.button("Import MSWIPE", type="primary"):
+            with st.status("Importing MSWIPE Data...", expanded=True) as status:
+                with open("temp_ms.csv", "wb") as f:
+                    f.write(ms_file.getbuffer())
+
+                status.write("Processing file...")
+                importer = MSwipeImporter(session)
+                try:
+                    count = importer.run("temp_ms.csv")
+                    status.update(label=f"MSWIPE Data Imported Successfully! ({count} records)", state="complete", expanded=False)
+                    st.success(f"MSWIPE Data Imported Successfully! ({count} records)")
+                except Exception as e:
+                    status.update(label="Import Failed", state="error")
+                    st.error(f"Error importing MSWIPE: {e}")
 
     st.subheader("3. Notepad Data")
     np_file = st.file_uploader(
@@ -89,16 +119,31 @@ if page == "Import Data":
         help="Upload the runner notepad entries for deliveries."
     )
     if np_file:
-        if st.button("Import Notepad"):
-            with open("temp_np.xlsx", "wb") as f:
-                f.write(np_file.getbuffer())
-
-            importer = NotepadImporter(session)
+        with st.expander("Preview Data", expanded=False):
             try:
-                importer.run("temp_np.xlsx")
-                st.success("Notepad Data Imported Successfully!")
+                if np_file.name.endswith('.csv'):
+                    df_preview = pd.read_csv(np_file)
+                else:
+                    df_preview = pd.read_excel(np_file)
+                st.dataframe(df_preview.head())
+                np_file.seek(0)
             except Exception as e:
-                st.error(f"Error importing Notepad: {e}")
+                st.error(f"Error reading preview: {e}")
+
+        if st.button("Import Notepad", type="primary"):
+            with st.status("Importing Notepad Data...", expanded=True) as status:
+                with open("temp_np.xlsx", "wb") as f:
+                    f.write(np_file.getbuffer())
+
+                status.write("Processing file...")
+                importer = NotepadImporter(session)
+                try:
+                    count = importer.run("temp_np.xlsx")
+                    status.update(label=f"Notepad Data Imported Successfully! ({count} records)", state="complete", expanded=False)
+                    st.success(f"Notepad Data Imported Successfully! ({count} records)")
+                except Exception as e:
+                    status.update(label="Import Failed", state="error")
+                    st.error(f"Error importing Notepad: {e}")
 
     st.subheader("4. Cash Register Data")
     cr_file = st.file_uploader(
@@ -108,16 +153,28 @@ if page == "Import Data":
     )
     year = st.number_input("Year", min_value=2000, max_value=2100, value=date.today().year)
     if cr_file:
-        if st.button("Import Cash Register"):
-            with open("temp_cr.xlsx", "wb") as f:
-                f.write(cr_file.getbuffer())
-
-            importer = CashRegisterImporter(session)
+        with st.expander("Preview Data", expanded=False):
             try:
-                importer.run("temp_cr.xlsx", year=year)
-                st.success("Cash Register Data Imported Successfully!")
+                df_preview = pd.read_excel(cr_file)
+                st.dataframe(df_preview.head())
+                cr_file.seek(0)
             except Exception as e:
-                st.error(f"Error importing Cash Register: {e}")
+                st.error(f"Error reading preview: {e}")
+
+        if st.button("Import Cash Register", type="primary"):
+            with st.status("Importing Cash Register Data...", expanded=True) as status:
+                with open("temp_cr.xlsx", "wb") as f:
+                    f.write(cr_file.getbuffer())
+
+                status.write("Processing file...")
+                importer = CashRegisterImporter(session)
+                try:
+                    count = importer.run("temp_cr.xlsx", year=year)
+                    status.update(label=f"Cash Register Data Imported Successfully! ({count} records)", state="complete", expanded=False)
+                    st.success(f"Cash Register Data Imported Successfully! ({count} records)")
+                except Exception as e:
+                    status.update(label="Import Failed", state="error")
+                    st.error(f"Error importing Cash Register: {e}")
 
 elif page == "Run Reconciliation":
     st.header("Reconciliation Engine")
