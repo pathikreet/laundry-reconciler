@@ -46,7 +46,11 @@ if page == "Import Data":
     st.header("Import Wizard")
 
     st.subheader("1. CRM Data")
-    crm_file = st.file_uploader("Upload CRM Excel/CSV", type=['csv', 'xlsx'])
+    crm_file = st.file_uploader(
+        "Upload CRM Excel/CSV",
+        type=['csv', 'xlsx'],
+        help="Upload the daily sales export from your CRM system."
+    )
     if crm_file:
         if st.button("Import CRM"):
             # Save temp file
@@ -61,7 +65,11 @@ if page == "Import Data":
                 st.error(f"Error importing CRM: {e}")
 
     st.subheader("2. MSWIPE Data")
-    ms_file = st.file_uploader("Upload MSWIPE CSV", type=['csv', 'xlsx'])
+    ms_file = st.file_uploader(
+        "Upload MSWIPE CSV",
+        type=['csv', 'xlsx'],
+        help="Upload the daily payments export from MSWIPE."
+    )
     if ms_file:
         if st.button("Import MSWIPE"):
             with open("temp_ms.csv", "wb") as f:
@@ -75,7 +83,11 @@ if page == "Import Data":
                 st.error(f"Error importing MSWIPE: {e}")
 
     st.subheader("3. Notepad Data")
-    np_file = st.file_uploader("Upload Notepad Excel/CSV", type=['csv', 'xlsx'])
+    np_file = st.file_uploader(
+        "Upload Notepad Excel/CSV",
+        type=['csv', 'xlsx'],
+        help="Upload the runner notepad entries for deliveries."
+    )
     if np_file:
         if st.button("Import Notepad"):
             with open("temp_np.xlsx", "wb") as f:
@@ -89,7 +101,11 @@ if page == "Import Data":
                 st.error(f"Error importing Notepad: {e}")
 
     st.subheader("4. Cash Register Data")
-    cr_file = st.file_uploader("Upload Cash Register Excel", type=['xlsx'])
+    cr_file = st.file_uploader(
+        "Upload Cash Register Excel",
+        type=['xlsx'],
+        help="Upload the yearly cash register workbook."
+    )
     year = st.number_input("Year", min_value=2000, max_value=2100, value=date.today().year)
     if cr_file:
         if st.button("Import Cash Register"):
@@ -109,18 +125,22 @@ elif page == "Run Reconciliation":
     run_date = st.date_input("Select Date to Reconcile", value=date.today())
 
     if st.button("Start Reconciliation"):
-        st.info("Running Matching Service...")
-        matcher = MatchingService(session)
-        matcher.match_notepad_deliveries()
-        matcher.match_mswipe_payments()
+        with st.status("Running Reconciliation Process...", expanded=True) as status:
+            st.write("Running Matching Service...")
+            matcher = MatchingService(session)
+            matcher.match_notepad_deliveries()
+            matcher.match_mswipe_payments()
+            st.write("Matching Service Complete.")
 
-        st.info(f"Running Reconciliation for {run_date}...")
-        recon = ReconciliationService(session)
-        try:
-            run = recon.run_reconciliation(run_date)
-            st.success(f"Reconciliation Complete! Run ID: {run.id}, Status: {run.status}")
-        except Exception as e:
-            st.error(f"Reconciliation Failed: {e}")
+            st.write(f"Running Reconciliation for {run_date}...")
+            recon = ReconciliationService(session)
+            try:
+                run = recon.run_reconciliation(run_date)
+                status.update(label="Reconciliation Complete!", state="complete", expanded=False)
+                st.success(f"Reconciliation Complete! Run ID: {run.id}, Status: {run.status}")
+            except Exception as e:
+                status.update(label="Reconciliation Failed", state="error")
+                st.error(f"Reconciliation Failed: {e}")
 
 elif page == "View Results":
     st.header("Reconciliation Results")
