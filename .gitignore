@@ -5,3 +5,7 @@ __pycache__/
 .pytest_cache/
 *.db
 .env
+streamlit.log
+temp_*.xlsx
+temp_*.csv
+verification/*.png

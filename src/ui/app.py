@@ -32,6 +32,29 @@ def get_session():
     Session = sessionmaker(bind=engine)
     return Session()
 
+def preview_uploaded_file(uploaded_file):
+    """
+    Shows a preview of the uploaded file data in an expander.
+    """
+    if uploaded_file is None:
+        return
+
+    with st.expander(f"Preview Data ({uploaded_file.name})", expanded=False):
+        try:
+            # Check file extension
+            if uploaded_file.name.lower().endswith('.csv'):
+                df = pd.read_csv(uploaded_file, nrows=5)
+            else:
+                df = pd.read_excel(uploaded_file, nrows=5)
+
+            st.dataframe(df)
+            st.caption(f"Showing first 5 rows.")
+        except Exception as e:
+            st.error(f"Error previewing file: {str(e)}")
+        finally:
+            # Reset file pointer for subsequent reads/writes
+            uploaded_file.seek(0)
+
 st.set_page_config(page_title="Laundry Reconciler", layout="wide")
 
 st.title("Laundry Reconciler MVP")
@@ -52,6 +75,7 @@ if page == "Import Data":
         help="Upload the daily sales export from your CRM system."
     )
     if crm_file:
+        preview_uploaded_file(crm_file)
         if st.button("Import CRM"):
             # Save temp file
             with open("temp_crm.xlsx", "wb") as f:
@@ -71,6 +95,7 @@ if page == "Import Data":
         help="Upload the daily payments export from MSWIPE."
     )
     if ms_file:
+        preview_uploaded_file(ms_file)
         if st.button("Import MSWIPE"):
             with open("temp_ms.csv", "wb") as f:
                 f.write(ms_file.getbuffer())
@@ -89,6 +114,7 @@ if page == "Import Data":
         help="Upload the runner notepad entries for deliveries."
     )
     if np_file:
+        preview_uploaded_file(np_file)
         if st.button("Import Notepad"):
             with open("temp_np.xlsx", "wb") as f:
                 f.write(np_file.getbuffer())
@@ -108,6 +134,7 @@ if page == "Import Data":
     )
     year = st.number_input("Year", min_value=2000, max_value=2100, value=date.today().year)
     if cr_file:
+        preview_uploaded_file(cr_file)
         if st.button("Import Cash Register"):
             with open("temp_cr.xlsx", "wb") as f:
                 f.write(cr_file.getbuffer())
