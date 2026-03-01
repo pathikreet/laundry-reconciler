@@ -37,11 +37,13 @@ class BaseImporter(ABC):
         """
         pass
 
-    def run(self, file_path: str, **kwargs) -> None:
+    def run(self, file_path: str, **kwargs) -> int:
         """
         Executes the full import pipeline: import -> normalize -> validate -> save.
+        Returns the number of validated records processed.
         """
         raw_data = self.import_data(file_path, **kwargs)
         normalized_data = self.normalize(raw_data)
         validated_data = self.validate(normalized_data)
         self.save(validated_data)
+        return len(validated_data)

@@ -117,8 +117,9 @@ if page == "Import Data":
 
             importer = CRMImporter(session)
             try:
-                importer.run("temp_crm.xlsx")
-                st.success("CRM Data Imported Successfully!")
+                with st.spinner("Importing CRM Data..."):
+                    records_processed = importer.run("temp_crm.xlsx")
+                st.success(f"CRM Data Imported Successfully! ({records_processed} records processed)")
             except Exception as e:
                 st.error(f"Error importing CRM: {e}")
 
@@ -138,8 +139,9 @@ if page == "Import Data":
 
             importer = MSwipeImporter(session)
             try:
-                importer.run("temp_ms.csv")
-                st.success("MSWIPE Data Imported Successfully!")
+                with st.spinner("Importing MSWIPE Data..."):
+                    records_processed = importer.run("temp_ms.csv")
+                st.success(f"MSWIPE Data Imported Successfully! ({records_processed} records processed)")
             except Exception as e:
                 st.error(f"Error importing MSWIPE: {e}")
 
@@ -159,8 +161,9 @@ if page == "Import Data":
 
             importer = NotepadImporter(session)
             try:
-                importer.run("temp_np.xlsx")
-                st.success("Notepad Data Imported Successfully!")
+                with st.spinner("Importing Notepad Data..."):
+                    records_processed = importer.run("temp_np.xlsx")
+                st.success(f"Notepad Data Imported Successfully! ({records_processed} records processed)")
             except Exception as e:
                 st.error(f"Error importing Notepad: {e}")
 
@@ -181,8 +184,9 @@ if page == "Import Data":
 
             importer = CashRegisterImporter(session)
             try:
-                importer.run("temp_cr.xlsx", year=year)
-                st.success("Cash Register Data Imported Successfully!")
+                with st.spinner("Importing Cash Register Data..."):
+                    records_processed = importer.run("temp_cr.xlsx", year=year)
+                st.success(f"Cash Register Data Imported Successfully! ({records_processed} records processed)")
             except Exception as e:
                 st.error(f"Error importing Cash Register: {e}")
 
