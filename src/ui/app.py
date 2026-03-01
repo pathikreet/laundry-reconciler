@@ -59,6 +59,34 @@ def get_session():
     Session = sessionmaker(bind=engine)
     return Session()
 
+def preview_uploaded_file(uploaded_file):
+    """
+    Displays a preview of the uploaded file in an expander.
+    Handles CSV and Excel files.
+    """
+    try:
+        # Reset file pointer to beginning
+        uploaded_file.seek(0)
+
+        if uploaded_file.name.endswith('.csv'):
+            df = pd.read_csv(uploaded_file, nrows=5)
+        else:
+            xl = pd.ExcelFile(uploaded_file)
+            sheet_names = xl.sheet_names
+            if len(sheet_names) > 1:
+                st.info(f"Sheets found: {', '.join(sheet_names)}")
+            # Read first sheet for preview
+            df = pd.read_excel(uploaded_file, nrows=5)
+
+        with st.expander(f"Preview: {uploaded_file.name}", expanded=False):
+            st.dataframe(df)
+
+    except Exception as e:
+        st.error(f"Error previewing file: {e}")
+    finally:
+        # crucial: Reset file pointer for subsequent reading by the importer
+        uploaded_file.seek(0)
+
 st.set_page_config(page_title="Laundry Reconciler", layout="wide")
 
 st.title("Laundry Reconciler MVP")
