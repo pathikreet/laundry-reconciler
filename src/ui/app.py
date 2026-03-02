@@ -51,6 +51,33 @@ DB_PATH = "laundry_reconciler.db"
 MAX_UPLOAD_MB = 50
 ALLOWED_TYPES = ['csv', 'xlsx', 'xls']
 
+def preview_uploaded_file(uploaded_file):
+    """
+    Displays a small preview of the uploaded file to reassure the user
+    they uploaded the right data before importing.
+    """
+    try:
+        uploaded_file.seek(0)
+        file_ext = uploaded_file.name.split('.')[-1].lower()
+
+        if file_ext in ['xlsx', 'xls']:
+            xl = pd.ExcelFile(uploaded_file)
+            st.caption(f"Sheets found: {', '.join(xl.sheet_names)}")
+            df = xl.parse(xl.sheet_names[0], nrows=5)
+        elif file_ext == 'csv':
+            df = pd.read_csv(uploaded_file, nrows=5)
+        else:
+            st.warning("Preview not supported for this file type.")
+            return
+
+        st.dataframe(df, use_container_width=True)
+
+    except Exception as e:
+        st.warning(f"Could not generate preview: {e}")
+    finally:
+        # Crucial: Reset pointer so the actual import doesn't fail!
+        uploaded_file.seek(0)
+
 # Initialize DB if needed
 if not os.path.exists(DB_PATH):
     init_db(DB_PATH)
