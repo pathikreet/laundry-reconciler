@@ -66,12 +66,27 @@ class BaseRepository(Generic[T]):
         """
         Deletes an entity by its ID.
 
+        Performs a safe delete that rolls back if cascade/integrity
+        constraints are violated, preventing orphaned records.
+
         Returns:
             True if deleted, False if not found.
+
+        Raises:
+            DatabaseError: If the delete violates integrity constraints.
         """
+        from src.exceptions import DatabaseError
         obj = self.get(id)
         if obj:
-            self.session.delete(obj)
-            self.session.commit()
-            return True
+            try:
+                self.session.delete(obj)
+                self.session.commit()
+                return True
+            except Exception as e:
+                self.session.rollback()
+                raise DatabaseError(
+                    f"Cannot delete {self.model.__name__} with id={id}: "
+                    f"integrity constraint violated. Check for dependent records.",
+                    details={"model": self.model.__name__, "id": id, "error": str(e)}
+                )
         return False

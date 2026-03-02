@@ -32,3 +32,6 @@ class ReconciliationRun(Base):
     summary_stats = Column(JSON, nullable=True)
     started_at = Column(DateTime, nullable=False, default=func.now())
     completed_at = Column(DateTime, nullable=True)
+
+    def __repr__(self):
+        return f"<ReconciliationRun(id={self.id}, date={self.run_date}, status='{self.status}')>"

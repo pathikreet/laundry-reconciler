@@ -42,5 +42,8 @@ class CashRegisterEntry(Base):
     # Relationship to the Run
     reconciliation_run = relationship("ReconciliationRun", back_populates="cash_entries")
 
+    def __repr__(self):
+        return f"<CashRegisterEntry(id={self.id}, date={self.entry_date}, closing={self.closing_balance}, derived={self.derived_cash_from_orders})>"
+
 # Add back relationship
 ReconciliationRun.cash_entries = relationship("CashRegisterEntry", back_populates="reconciliation_run")

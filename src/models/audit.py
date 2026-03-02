@@ -41,5 +41,8 @@ class AuditLog(Base):
     # Relationship to the Run
     reconciliation_run = relationship("ReconciliationRun", back_populates="audit_logs")
 
+    def __repr__(self):
+        return f"<AuditLog(id={self.id}, action='{self.action_type}', entity='{self.entity_type}', entity_id={self.entity_id})>"
+
 # Add back relationship
 ReconciliationRun.audit_logs = relationship("AuditLog", back_populates="reconciliation_run")

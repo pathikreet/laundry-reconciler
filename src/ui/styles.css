@@ -1,0 +1,118 @@
+/* ── Laundry Reconciler UI Custom Styles ─────────────── */
+
+/* Step cards for the import wizard */
+.step-card {
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 1.2rem;
+    margin-bottom: 0.8rem;
+    transition: all 0.3s ease;
+    background: linear-gradient(135deg, #fafafa 0%, #f5f5f5 100%);
+}
+.step-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    transform: translateY(-1px);
+}
+.step-card.complete {
+    border-left: 4px solid #4caf50;
+    background: linear-gradient(135deg, #f1f8e9 0%, #e8f5e9 100%);
+}
+.step-card.active {
+    border-left: 4px solid #2196f3;
+    background: linear-gradient(135deg, #e3f2fd 0%, #e8eaf6 100%);
+}
+.step-card.locked {
+    border-left: 4px solid #bdbdbd;
+    opacity: 0.6;
+    background: linear-gradient(135deg, #fafafa 0%, #f0f0f0 100%);
+}
+
+/* Status badges */
+.badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+}
+.badge-success { background: #c8e6c9; color: #1b5e20; }
+.badge-info { background: #bbdefb; color: #0d47a1; }
+.badge-warning { background: #fff3e0; color: #e65100; }
+.badge-error { background: #ffcdd2; color: #b71c1c; }
+
+/* Severity badges for exceptions */
+.severity-high { background: #ef5350; color: white; }
+.severity-medium { background: #ff9800; color: white; }
+.severity-low { background: #ffc107; color: #333; }
+.severity-info { background: #42a5f5; color: white; }
+
+/* Metrics row */
+.metric-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 1.2rem;
+    text-align: center;
+}
+.metric-card h3 {
+    font-size: 2rem;
+    margin: 0;
+}
+.metric-card p {
+    margin: 0;
+    opacity: 0.85;
+    font-size: 0.85rem;
+}
+
+/* Progress bar */
+.progress-container {
+    background: #e0e0e0;
+    border-radius: 10px;
+    overflow: hidden;
+    height: 12px;
+    margin: 1rem 0;
+}
+.progress-bar {
+    background: linear-gradient(90deg, #4caf50, #66bb6a);
+    height: 100%;
+    border-radius: 10px;
+    transition: width 0.5s ease;
+}
+
+/* Import summary */
+.import-summary {
+    background: #f5f5f5;
+    border-radius: 8px;
+    padding: 0.8rem 1rem;
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+}
+
+/* Page header */
+.page-header {
+    padding: 0.5rem 0 1.5rem 0;
+    border-bottom: 2px solid #e0e0e0;
+    margin-bottom: 1.5rem;
+}
+
+/* Data preview table */
+.stDataFrame {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Hide Streamlit branding */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+
+/* Custom button styles */
+.stButton button {
+    border-radius: 8px;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+.stButton button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.12);
+}

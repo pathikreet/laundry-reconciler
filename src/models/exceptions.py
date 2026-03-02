@@ -47,6 +47,9 @@ class OrderException(Base):
     reconciliation_run = relationship("ReconciliationRun", back_populates="exceptions")
     order = relationship("Order", back_populates="exceptions")
 
+    def __repr__(self):
+        return f"<OrderException(id={self.id}, type='{self.exception_type}', severity='{self.severity}', status='{self.resolution_status}')>"
+
 # Add back relationships
 ReconciliationRun.exceptions = relationship("OrderException", back_populates="reconciliation_run")
 Order.exceptions = relationship("OrderException", back_populates="order")

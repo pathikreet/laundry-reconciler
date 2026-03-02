@@ -48,5 +48,8 @@ class PaymentEvent(Base):
     # Relationship to the Order this payment is for
     order = relationship("Order", back_populates="payments")
 
+    def __repr__(self):
+        return f"<PaymentEvent(id={self.id}, source='{self.source}', amount={self.amount}, mode='{self.payment_mode}', date={self.payment_date})>"
+
 # Add back relationship to Order
 Order.payments = relationship("PaymentEvent", back_populates="order")

@@ -2,31 +2,31 @@
 Task: CFG-001 - Configuration & Tolerance Settings Management
 Description: Centralized configuration management using Pydantic.
 PRD Section: 3.2 Tolerances (defaults + configurable)
+
+Settings are loaded in this priority order:
+1. .env file in project root (if present)
+2. Environment variables (e.g. AMOUNT_MATCH_TOLERANCE_INR=5.0)
+3. Default values defined below
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional, Dict
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
+from typing import Dict
 
-class Settings(BaseModel):
+
+class Settings(BaseSettings):
     """
     Application-wide configuration settings and tolerances.
 
-    This class defines the default values for all tunable parameters in the system.
-    It uses Pydantic for validation and type safety.
-    These settings can be overridden by environment variables or database entries.
-
-    Attributes:
-        amount_match_tolerance_inr: Max difference to consider amounts a match (PRD 3.2).
-        daily_total_tolerance_inr: Absolute tolerance for day-level comparisons.
-        daily_total_tolerance_percent: Percentage tolerance for day-level comparisons.
-        mswipe_time_match_window_minutes: Time window for linking MSWIPE txns to orders.
-        fuzzy_name_min_score: Minimum similarity score (0-1) for fuzzy name matching.
-        fuzzy_date_proximity_days: Max days difference for fuzzy date matching.
-        cash_variance_tolerance_inr: Absolute tolerance for cash register variance.
-        cash_variance_tolerance_percent: Percentage tolerance for cash register variance.
-        credit_tolerance_inr: Max outstanding balance before flagging credit violation (PRD 3.8).
-        payment_mode_mapping: Dictionary normalizing source payment modes to internal types.
+    All fields can be overridden via environment variables or a .env file.
+    Variable names are case-insensitive (e.g. AMOUNT_MATCH_TOLERANCE_INR=5.0).
     """
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",  # ignore unknown env vars
+    )
 
     # Tolerances (PRD 3.2)
     amount_match_tolerance_inr: float = Field(2.0, description="Order-level amount match tolerance")
@@ -38,20 +38,61 @@ class Settings(BaseModel):
     cash_variance_tolerance_inr: float = Field(100.0, description="Cash variance tolerance INR")
     cash_variance_tolerance_percent: float = Field(1.0, description="Cash variance tolerance Percent")
     credit_tolerance_inr: float = Field(1.0, description="Credit tolerance INR")
+    late_payment_threshold_days: int = Field(0, description="Days after delivery before flagging as late payment")
 
     # Payment Mode Mapping (PRD 2.1)
-    # Normalizes varied input strings (e.g. 'google pay', 'upi') to standard internal keys.
+    # Note: In runner notepad, staff mark both GPay and Paytm as "Online".
+    # Notepad payment mode is ONLY used for cash-vs-noncash classification
+    # (for cash variance detection). CRM is the authoritative source for payment mode.
     payment_mode_mapping: Dict[str, str] = Field(default_factory=lambda: {
         "cash": "Cash",
         "gpay": "GPay",
         "google pay": "GPay",
         "upi": "GPay",
         "paytm": "Paytm",
-        "online": "Online",
-        "card": "Card"
+        "package": "Package",
+        "online": "Online",  # Notepad generic: could be GPay or Paytm
+        "noncash": "Online",
+        "card": "Card",
+        "due": "Due",          # Payment pending — delivered but not paid
+        "adv": "Advance",      # Advance payment received
+        "advance": "Advance",
+        "adv paid": "Advance",
+        "adv payment": "Advance",
     })
 
-    class Config:
-        arbitrary_types_allowed = True
+    # ── Property Aliases for service-level access ──────────
+    @property
+    def amount_tolerance(self) -> float:
+        return self.amount_match_tolerance_inr
+
+    @property
+    def fuzzy_name_threshold(self) -> float:
+        return self.fuzzy_name_min_score
+
+    @property
+    def date_window_days(self) -> int:
+        return self.fuzzy_date_proximity_days
+
+    @property
+    def cash_variance_tolerance(self) -> float:
+        return self.cash_variance_tolerance_inr
+
+    @property
+    def gpay_tolerance(self) -> float:
+        return self.daily_total_tolerance_inr
+
+    @property
+    def credit_tolerance(self) -> float:
+        return self.credit_tolerance_inr
+
+    @property
+    def confidence_auto_accept(self) -> float:
+        return 0.85
+
+    @property
+    def confidence_review_threshold(self) -> float:
+        return 0.60
+
 
 settings = Settings()

@@ -43,3 +43,6 @@ class Order(Base):
     raw_data = Column(JSON, nullable=True)
     created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
+
+    def __repr__(self):
+        return f"<Order(id={self.id}, order_number='{self.order_number}', customer='{self.customer_name}', amount={self.order_amount})>"

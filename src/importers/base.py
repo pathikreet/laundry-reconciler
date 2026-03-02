@@ -1,13 +1,22 @@
+import logging
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
 from sqlalchemy.orm import Session
+from src.exceptions import ImportError as AppImportError
+
+logger = logging.getLogger(__name__)
+
 
 class BaseImporter(ABC):
     """
     Abstract base class for all data importers.
+
+    Provides a transactional import pipeline: import → normalize → validate → save.
+    If any step fails, the entire import is rolled back to maintain data consistency.
     """
     def __init__(self, db_session: Session):
         self.db = db_session
+        self.errors: List[Dict[str, Any]] = []
 
     @abstractmethod
     def import_data(self, file_path: str, **kwargs) -> List[Dict[str, Any]]:
@@ -27,6 +36,7 @@ class BaseImporter(ABC):
     def validate(self, data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
         Validates the data against business rules.
+        Returns only valid rows; invalid rows are collected in self.errors.
         """
         pass
 
@@ -37,11 +47,51 @@ class BaseImporter(ABC):
         """
         pass
 
-    def run(self, file_path: str, **kwargs) -> None:
+    def run(self, file_path: str, **kwargs) -> Dict[str, Any]:
         """
-        Executes the full import pipeline: import -> normalize -> validate -> save.
+        Executes the full import pipeline with transaction management.
+
+        If save fails, the transaction is rolled back to prevent partial imports.
+        Valid rows are processed even if some rows fail validation (graceful degradation).
+
+        Returns:
+            A summary dict with counts: total, imported, errors.
         """
-        raw_data = self.import_data(file_path, **kwargs)
-        normalized_data = self.normalize(raw_data)
-        validated_data = self.validate(normalized_data)
-        self.save(validated_data)
+        self.errors = []
+
+        try:
+            raw_data = self.import_data(file_path, **kwargs)
+            normalized_data = self.normalize(raw_data)
+            validated_data = self.validate(normalized_data)
+
+            if validated_data:
+                self.save(validated_data)
+                self.db.commit()
+            else:
+                logger.warning("No valid data to import from %s", file_path)
+
+        except AppImportError:
+            self.db.rollback()
+            raise
+        except Exception as e:
+            self.db.rollback()
+            logger.error("Import failed for %s: %s", file_path, str(e))
+            raise AppImportError(
+                f"Import failed for '{file_path}': {e}",
+                details={"file_path": file_path, "error": str(e)}
+            )
+
+        summary = {
+            "total": len(raw_data) if 'raw_data' in dir() else 0,
+            "imported": len(validated_data) if 'validated_data' in dir() else 0,
+            "errors": len(self.errors),
+            "error_details": self.errors[:10]  # Limit to first 10 errors
+        }
+
+        if self.errors:
+            logger.warning(
+                "Import of %s completed with %d errors out of %d rows",
+                file_path, len(self.errors), summary["total"]
+            )
+
+        return summary

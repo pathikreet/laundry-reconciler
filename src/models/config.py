@@ -30,6 +30,9 @@ class ColumnMapping(Base):
     created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
 
+    def __repr__(self):
+        return f"<ColumnMapping(id={self.id}, name='{self.name}', source='{self.source_type}', default={self.is_default})>"
+
 class ToleranceConfig(Base):
     """
     Stores key-value pairs for system-wide configuration and tolerances.
@@ -49,3 +52,6 @@ class ToleranceConfig(Base):
     config_value = Column(String, nullable=False)
     description = Column(String, nullable=True)
     updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
+
+    def __repr__(self):
+        return f"<ToleranceConfig(id={self.id}, key='{self.config_key}', value='{self.config_value}')>"

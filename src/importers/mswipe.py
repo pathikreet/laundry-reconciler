@@ -1,9 +1,12 @@
+import logging
 import pandas as pd
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from dateutil.parser import parse
 from src.importers.base import BaseImporter
 from src.models.payments import PaymentEvent
+
+logger = logging.getLogger(__name__)
 
 class MSwipeImporter(BaseImporter):
     def import_data(self, file_path: str, **kwargs) -> List[Dict[str, Any]]:
@@ -40,8 +43,8 @@ class MSwipeImporter(BaseImporter):
             if amount <= 0:
                 continue
 
-            # Date
-            date_val = get_val(['PaymentDate', 'TxnDate', 'TransactionDate', 'Transaction Date'])
+            # Date (prefer transaction/customer payment date over merchant settlement date)
+            date_val = get_val(['TxnDate', 'TransactionDate', 'Transaction Date', 'PaymentDate', 'Payment Date'])
             payment_date = self._parse_date(date_val)
             if not payment_date:
                 continue
@@ -68,8 +71,22 @@ class MSwipeImporter(BaseImporter):
         return [row for row in data if row['payment_date'] and row['amount'] > 0]
 
     def save(self, data: List[Dict[str, Any]]) -> None:
+        # Get dates present in this import batch
+        run_dates = set()
+        for r in data:
+            if r.get('payment_date'):
+                run_dates.add(r['payment_date'])
+
+        # Clear old MSWIPE events FOR THESE DATES so re-importing doesn't duplicate
+        if run_dates:
+            deleted = self.db.query(PaymentEvent).filter(
+                PaymentEvent.source == 'mswipe',
+                PaymentEvent.payment_date.in_(run_dates)
+            ).delete(synchronize_session=False)
+            if deleted:
+                logger.info("Cleared %d existing MSWIPE payment events before re-import", deleted)
+                self.db.flush()
         for row in data:
-            # Check for duplicates based on ref_id and amount/date
 
             query = self.db.query(PaymentEvent).filter_by(
                 source='mswipe',

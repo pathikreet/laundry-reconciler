@@ -45,5 +45,8 @@ class DeliveryEvent(Base):
     # Relationship to the Order being delivered
     order = relationship("Order", back_populates="deliveries")
 
+    def __repr__(self):
+        return f"<DeliveryEvent(id={self.id}, source='{self.source}', customer='{self.customer_name}', amount={self.amount_collected}, date={self.delivery_date})>"
+
 # Add back relationship to Order
 Order.deliveries = relationship("DeliveryEvent", back_populates="order")
