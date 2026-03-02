@@ -6,5 +6,38 @@ Collecting usage statistics. To deactivate, set browser.gatherUsageStats to fals
 
   Local URL: http://localhost:8501
   Network URL: http://192.168.0.2:8501
-  External URL: http://35.224.132.190:8501
+  External URL: http://34.46.237.233:8501
 
+2026-03-02 17:37:10,504 [INFO] src.services.matching: Notepad matching: {'exact': 0, 'fuzzy': 0, 'unmatched': 0, 'total': 0}
+2026-03-02 17:37:10,508 [INFO] src.services.matching: MSWIPE matching: {'matched': 0, 'ambiguous': 0, 'unmatched': 0, 'total': 0}
+2026-03-02 17:37:10,538 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-01: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,552 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-02: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,567 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-03: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,579 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-04: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,593 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-05: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,605 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-06: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,618 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-07: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,631 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-08: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,643 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-09: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,656 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-10: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,670 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-11: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,682 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-12: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,693 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-13: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,704 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-14: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,719 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-15: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,730 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-16: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,742 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-17: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,753 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-18: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,764 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-19: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,777 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-20: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,788 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-21: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,801 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-22: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,814 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-23: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,826 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-24: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,838 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-25: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,850 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-26: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,863 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-27: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,877 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-28: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,889 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-29: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,901 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-30: 0 order exceptions, 0 day exceptions
+2026-03-02 17:37:10,903 [INFO] src.services.reconciliation: Range reconciliation 2025-11-01 to 2025-11-30: 30 days, 0 total exceptions
