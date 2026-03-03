@@ -618,33 +618,36 @@ def page_reconciliation(session_db):
         run_date = st.date_input("Select Date to Reconcile", value=date.today())
 
         if st.button("▶️ Start Reconciliation", type="primary"):
-            with st.spinner("Running Matching Service..."):
+            with st.status(f"⚙️ Running Reconciliation for {run_date}...", expanded=True) as status:
+                st.write("Running Matching Service...")
                 matcher = MatchingService(session_db)
                 match_stats = matcher.match_notepad_deliveries()
                 mswipe_stats = matcher.match_mswipe_payments()
 
-            with st.spinner(f"Running Reconciliation for {run_date}..."):
+                st.write("Running Reconciliation rules...")
                 recon = ReconciliationService(session_db)
                 try:
                     run = recon.run_reconciliation(run_date)
-                    st.success(f"✅ Reconciliation Complete! Run ID: {run.id}")
-
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Notepad Matches",
-                               f"{match_stats.get('exact', 0) + match_stats.get('fuzzy', 0)}")
-                    col2.metric("MSWIPE Matches", str(mswipe_stats.get('matched', 0)))
-                    col3.metric("Exceptions", str(run.summary_stats.get('total_exceptions', 0)))
-
-                    late = run.summary_stats.get('late_payment_exceptions', 0)
-                    if late > 0:
-                        st.warning(f"⚠️ {late} late payment(s) detected")
-
-                    if st.button("📊 View Results", key="nav_to_results_single"):
-                        st.session_state['nav_radio'] = "View Results"
-                        st.rerun()
-
+                    status.update(label=f"Reconciliation Complete! Run ID: {run.id}", state="complete", expanded=False)
+                    success = True
                 except LaundryReconcilerError as e:
-                    st.error(f"❌ Reconciliation Failed: {e}")
+                    status.update(label=f"Reconciliation Failed: {e}", state="error", expanded=True)
+                    success = False
+
+            if success:
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Notepad Matches",
+                           f"{match_stats.get('exact', 0) + match_stats.get('fuzzy', 0)}")
+                col2.metric("MSWIPE Matches", str(mswipe_stats.get('matched', 0)))
+                col3.metric("Exceptions", str(run.summary_stats.get('total_exceptions', 0)))
+
+                late = run.summary_stats.get('late_payment_exceptions', 0)
+                if late > 0:
+                    st.warning(f"⚠️ {late} late payment(s) detected")
+
+                if st.button("📊 View Results", key="nav_to_results_single"):
+                    st.session_state['nav_radio'] = "View Results"
+                    st.rerun()
 
     else:
         # Date range mode
