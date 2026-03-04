@@ -618,15 +618,17 @@ def page_reconciliation(session_db):
         run_date = st.date_input("Select Date to Reconcile", value=date.today())
 
         if st.button("▶️ Start Reconciliation", type="primary"):
-            with st.spinner("Running Matching Service..."):
+            with st.status("Running Reconciliation...", expanded=True) as status:
+                st.write("Running Matching Service...")
                 matcher = MatchingService(session_db)
                 match_stats = matcher.match_notepad_deliveries()
                 mswipe_stats = matcher.match_mswipe_payments()
 
-            with st.spinner(f"Running Reconciliation for {run_date}..."):
+                st.write(f"Running Reconciliation for {run_date}...")
                 recon = ReconciliationService(session_db)
                 try:
                     run = recon.run_reconciliation(run_date)
+                    status.update(label="Reconciliation Complete!", state="complete", expanded=False)
                     st.success(f"✅ Reconciliation Complete! Run ID: {run.id}")
 
                     col1, col2, col3 = st.columns(3)
@@ -662,23 +664,25 @@ def page_reconciliation(session_db):
         st.info(f"📊 Will reconcile **{total_days} days** from {start_date} to {end_date}")
 
         if st.button("▶️ Start Range Reconciliation", type="primary"):
-            # Run matching first
-            with st.spinner("Running Matching Service..."):
+            with st.status("Running Range Reconciliation...", expanded=True) as status:
+                # Run matching first
+                st.write("Running Matching Service...")
                 matcher = MatchingService(session_db)
                 match_stats = matcher.match_notepad_deliveries()
                 mswipe_stats = matcher.match_mswipe_payments()
 
-            # Run range reconciliation with progress bar
-            progress_bar = st.progress(0, text="Starting reconciliation...")
-            status_text = st.empty()
+                # Run range reconciliation with progress bar
+                progress_bar = st.progress(0, text="Starting reconciliation...")
+                status_text = st.empty()
 
-            def on_progress(current, total):
-                progress_bar.progress(current / total, text=f"Processing day {current}/{total}...")
+                def on_progress(current, total):
+                    progress_bar.progress(current / total, text=f"Processing day {current}/{total}...")
 
-            recon = ReconciliationService(session_db)
-            totals = recon.run_reconciliation_range(start_date, end_date, progress_callback=on_progress)
+                recon = ReconciliationService(session_db)
+                totals = recon.run_reconciliation_range(start_date, end_date, progress_callback=on_progress)
 
-            progress_bar.progress(1.0, text="✅ Complete!")
+                progress_bar.progress(1.0, text="✅ Complete!")
+                status.update(label="Range Reconciliation Complete!", state="complete", expanded=False)
 
             # Show consolidated results
             st.success(f"✅ Range Reconciliation Complete!")
