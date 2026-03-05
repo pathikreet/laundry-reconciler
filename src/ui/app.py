@@ -215,9 +215,10 @@ def render_import_step(step_num, title, desc, key, importer_class, session_db,
                 else:
                     preview_df = pd.read_excel(uploaded, nrows=5)
                 st.dataframe(preview_df.astype(str), width='stretch')
-                uploaded.seek(0)  # Reset for import
             except Exception:
                 st.warning("Could not preview file")
+            finally:
+                uploaded.seek(0)  # Reset for import
 
         if st.button(f"🚀 Import {title}", key=f"btn_{key}"):
             with st.spinner(f"Importing {title}..."):
@@ -325,9 +326,10 @@ def render_notepad_step(session_db, is_unlocked):
                             preview_sheet = selected_sheet if selected_sheet != '__all__' else 0
                             preview = pd.read_excel(uploaded, sheet_name=preview_sheet, nrows=5)
                         st.dataframe(preview.astype(str), width='stretch')
-                        uploaded.seek(0)
                     except Exception:
                         st.warning("Could not preview file")
+                    finally:
+                        uploaded.seek(0)
 
                 if st.button("🚀 Import Notepad File", key="btn_notepad_file"):
                     with st.spinner("Importing Notepad data..."):
@@ -514,9 +516,10 @@ def render_cash_register_step(session_db, is_unlocked):
                 preview_sheet = selected_sheet if not isinstance(selected_sheet, list) else selected_sheet[0]
                 preview = pd.read_excel(uploaded, sheet_name=preview_sheet, nrows=5)
                 st.dataframe(preview.astype(str), width='stretch')
-                uploaded.seek(0)
             except Exception:
                 st.warning("Could not preview file")
+            finally:
+                uploaded.seek(0)
 
         if st.button("🚀 Import Cash Register", key="btn_cash_register"):
             with st.spinner("Importing Cash Register data..."):
@@ -618,15 +621,17 @@ def page_reconciliation(session_db):
         run_date = st.date_input("Select Date to Reconcile", value=date.today())
 
         if st.button("▶️ Start Reconciliation", type="primary"):
-            with st.spinner("Running Matching Service..."):
+            with st.status(f"Reconciling {run_date}...", expanded=True) as status:
+                st.write("Running Matching Service...")
                 matcher = MatchingService(session_db)
                 match_stats = matcher.match_notepad_deliveries()
                 mswipe_stats = matcher.match_mswipe_payments()
 
-            with st.spinner(f"Running Reconciliation for {run_date}..."):
+                st.write("Running Reconciliation Engine...")
                 recon = ReconciliationService(session_db)
                 try:
                     run = recon.run_reconciliation(run_date)
+                    status.update(label=f"✅ Reconciliation Complete! Run ID: {run.id}", state="complete", expanded=False)
                     st.success(f"✅ Reconciliation Complete! Run ID: {run.id}")
 
                     col1, col2, col3 = st.columns(3)
@@ -644,6 +649,7 @@ def page_reconciliation(session_db):
                         st.rerun()
 
                 except LaundryReconcilerError as e:
+                    status.update(label="❌ Reconciliation Failed", state="error", expanded=True)
                     st.error(f"❌ Reconciliation Failed: {e}")
 
     else:
@@ -662,23 +668,26 @@ def page_reconciliation(session_db):
         st.info(f"📊 Will reconcile **{total_days} days** from {start_date} to {end_date}")
 
         if st.button("▶️ Start Range Reconciliation", type="primary"):
-            # Run matching first
-            with st.spinner("Running Matching Service..."):
+            with st.status(f"Reconciling {total_days} days...", expanded=True) as status:
+                # Run matching first
+                st.write("Running Matching Service...")
                 matcher = MatchingService(session_db)
                 match_stats = matcher.match_notepad_deliveries()
                 mswipe_stats = matcher.match_mswipe_payments()
 
-            # Run range reconciliation with progress bar
-            progress_bar = st.progress(0, text="Starting reconciliation...")
-            status_text = st.empty()
+                # Run range reconciliation with progress bar
+                st.write("Running Reconciliation Engine...")
+                progress_bar = st.progress(0, text="Starting reconciliation...")
+                status_text = st.empty()
 
-            def on_progress(current, total):
-                progress_bar.progress(current / total, text=f"Processing day {current}/{total}...")
+                def on_progress(current, total):
+                    progress_bar.progress(current / total, text=f"Processing day {current}/{total}...")
 
-            recon = ReconciliationService(session_db)
-            totals = recon.run_reconciliation_range(start_date, end_date, progress_callback=on_progress)
+                recon = ReconciliationService(session_db)
+                totals = recon.run_reconciliation_range(start_date, end_date, progress_callback=on_progress)
 
-            progress_bar.progress(1.0, text="✅ Complete!")
+                progress_bar.progress(1.0, text="✅ Complete!")
+                status.update(label="✅ Range Reconciliation Complete!", state="complete", expanded=False)
 
             # Show consolidated results
             st.success(f"✅ Range Reconciliation Complete!")
