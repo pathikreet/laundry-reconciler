@@ -45,7 +45,7 @@ def run():
             # Wait for status container
             try:
                 # The status container header
-                page.wait_for_selector("text=Running Reconciliation Process...", timeout=5000)
+                page.wait_for_selector("text=Running Reconciliation Engine...", timeout=5000)
                 print("Status container found.")
             except:
                 print("Status container not found immediately.")
