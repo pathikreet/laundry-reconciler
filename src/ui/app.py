@@ -210,14 +210,16 @@ def render_import_step(step_num, title, desc, key, importer_class, session_db,
         # Data preview
         with st.expander("📋 Preview first 5 rows", expanded=False):
             try:
+                uploaded.seek(0)
                 if uploaded.name.endswith('.csv'):
                     preview_df = pd.read_csv(uploaded, nrows=5)
                 else:
                     preview_df = pd.read_excel(uploaded, nrows=5)
                 st.dataframe(preview_df.astype(str), width='stretch')
-                uploaded.seek(0)  # Reset for import
             except Exception:
                 st.warning("Could not preview file")
+            finally:
+                uploaded.seek(0)  # Reset for import
 
         if st.button(f"🚀 Import {title}", key=f"btn_{key}"):
             with st.spinner(f"Importing {title}..."):
@@ -319,15 +321,17 @@ def render_notepad_step(session_db, is_unlocked):
 
                 with st.expander("📋 Preview first 5 rows", expanded=False):
                     try:
+                        uploaded.seek(0)
                         if uploaded.name.endswith('.csv'):
                             preview = pd.read_csv(uploaded, nrows=5)
                         else:
                             preview_sheet = selected_sheet if selected_sheet != '__all__' else 0
                             preview = pd.read_excel(uploaded, sheet_name=preview_sheet, nrows=5)
                         st.dataframe(preview.astype(str), width='stretch')
-                        uploaded.seek(0)
                     except Exception:
                         st.warning("Could not preview file")
+                    finally:
+                        uploaded.seek(0)
 
                 if st.button("🚀 Import Notepad File", key="btn_notepad_file"):
                     with st.spinner("Importing Notepad data..."):
@@ -511,12 +515,14 @@ def render_cash_register_step(session_db, is_unlocked):
 
         with st.expander("📋 Preview first 5 rows", expanded=False):
             try:
+                uploaded.seek(0)
                 preview_sheet = selected_sheet if not isinstance(selected_sheet, list) else selected_sheet[0]
                 preview = pd.read_excel(uploaded, sheet_name=preview_sheet, nrows=5)
                 st.dataframe(preview.astype(str), width='stretch')
-                uploaded.seek(0)
             except Exception:
                 st.warning("Could not preview file")
+            finally:
+                uploaded.seek(0)
 
         if st.button("🚀 Import Cash Register", key="btn_cash_register"):
             with st.spinner("Importing Cash Register data..."):
@@ -618,33 +624,36 @@ def page_reconciliation(session_db):
         run_date = st.date_input("Select Date to Reconcile", value=date.today())
 
         if st.button("▶️ Start Reconciliation", type="primary"):
-            with st.spinner("Running Matching Service..."):
-                matcher = MatchingService(session_db)
-                match_stats = matcher.match_notepad_deliveries()
-                mswipe_stats = matcher.match_mswipe_payments()
+            try:
+                with st.status("Reconciling data...", expanded=True) as status:
+                    st.write("Running Matching Service...")
+                    matcher = MatchingService(session_db)
+                    match_stats = matcher.match_notepad_deliveries()
+                    mswipe_stats = matcher.match_mswipe_payments()
 
-            with st.spinner(f"Running Reconciliation for {run_date}..."):
-                recon = ReconciliationService(session_db)
-                try:
+                    st.write(f"Running Reconciliation for {run_date}...")
+                    recon = ReconciliationService(session_db)
                     run = recon.run_reconciliation(run_date)
-                    st.success(f"✅ Reconciliation Complete! Run ID: {run.id}")
+                    status.update(label="Reconciliation Complete!", state="complete", expanded=False)
 
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Notepad Matches",
-                               f"{match_stats.get('exact', 0) + match_stats.get('fuzzy', 0)}")
-                    col2.metric("MSWIPE Matches", str(mswipe_stats.get('matched', 0)))
-                    col3.metric("Exceptions", str(run.summary_stats.get('total_exceptions', 0)))
+                st.success(f"✅ Reconciliation Complete! Run ID: {run.id}")
 
-                    late = run.summary_stats.get('late_payment_exceptions', 0)
-                    if late > 0:
-                        st.warning(f"⚠️ {late} late payment(s) detected")
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Notepad Matches",
+                           f"{match_stats.get('exact', 0) + match_stats.get('fuzzy', 0)}")
+                col2.metric("MSWIPE Matches", str(mswipe_stats.get('matched', 0)))
+                col3.metric("Exceptions", str(run.summary_stats.get('total_exceptions', 0)))
 
-                    if st.button("📊 View Results", key="nav_to_results_single"):
-                        st.session_state['nav_radio'] = "View Results"
-                        st.rerun()
+                late = run.summary_stats.get('late_payment_exceptions', 0)
+                if late > 0:
+                    st.warning(f"⚠️ {late} late payment(s) detected")
 
-                except LaundryReconcilerError as e:
-                    st.error(f"❌ Reconciliation Failed: {e}")
+                if st.button("📊 View Results", key="nav_to_results_single"):
+                    st.session_state['nav_radio'] = "View Results"
+                    st.rerun()
+
+            except LaundryReconcilerError as e:
+                st.error(f"❌ Reconciliation Failed: {e}")
 
     else:
         # Date range mode
