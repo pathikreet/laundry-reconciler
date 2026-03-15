@@ -38,5 +38,5 @@ def test_ui_import_and_basic_structure():
 
     # Verify basic streamlit calls were made (which happens on import for this script)
     mock_st.set_page_config.assert_called()
-    mock_st.title.assert_called_with("Laundry Reconciler MVP")
+    mock_st.title.assert_called_with("🧺 Laundry Reconciler")
     mock_st.sidebar.title.assert_called_with("Navigation")
