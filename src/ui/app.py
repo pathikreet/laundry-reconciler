@@ -618,33 +618,39 @@ def page_reconciliation(session_db):
         run_date = st.date_input("Select Date to Reconcile", value=date.today())
 
         if st.button("▶️ Start Reconciliation", type="primary"):
-            with st.spinner("Running Matching Service..."):
-                matcher = MatchingService(session_db)
-                match_stats = matcher.match_notepad_deliveries()
-                mswipe_stats = matcher.match_mswipe_payments()
+            try:
+                with st.status("Running Reconciliation Process...", expanded=True) as status:
+                    st.write("Running Matching Service...")
+                    matcher = MatchingService(session_db)
+                    match_stats = matcher.match_notepad_deliveries()
+                    mswipe_stats = matcher.match_mswipe_payments()
 
-            with st.spinner(f"Running Reconciliation for {run_date}..."):
-                recon = ReconciliationService(session_db)
-                try:
+                    st.write(f"Running Reconciliation Engine for {run_date}...")
+                    recon = ReconciliationService(session_db)
                     run = recon.run_reconciliation(run_date)
-                    st.success(f"✅ Reconciliation Complete! Run ID: {run.id}")
 
-                    col1, col2, col3 = st.columns(3)
-                    col1.metric("Notepad Matches",
-                               f"{match_stats.get('exact', 0) + match_stats.get('fuzzy', 0)}")
-                    col2.metric("MSWIPE Matches", str(mswipe_stats.get('matched', 0)))
-                    col3.metric("Exceptions", str(run.summary_stats.get('total_exceptions', 0)))
+                    status.update(label=f"Reconciliation Complete! Run ID: {run.id}", state="complete", expanded=False)
 
-                    late = run.summary_stats.get('late_payment_exceptions', 0)
-                    if late > 0:
-                        st.warning(f"⚠️ {late} late payment(s) detected")
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Notepad Matches",
+                           f"{match_stats.get('exact', 0) + match_stats.get('fuzzy', 0)}")
+                col2.metric("MSWIPE Matches", str(mswipe_stats.get('matched', 0)))
+                col3.metric("Exceptions", str(run.summary_stats.get('total_exceptions', 0)))
 
-                    if st.button("📊 View Results", key="nav_to_results_single"):
-                        st.session_state['nav_radio'] = "View Results"
-                        st.rerun()
+                late = run.summary_stats.get('late_payment_exceptions', 0)
+                if late > 0:
+                    st.warning(f"⚠️ {late} late payment(s) detected")
 
-                except LaundryReconcilerError as e:
-                    st.error(f"❌ Reconciliation Failed: {e}")
+                if st.button("📊 View Results", key="nav_to_results_single"):
+                    st.session_state['nav_radio'] = "View Results"
+                    st.rerun()
+
+            except LaundryReconcilerError as e:
+                status.update(label="Reconciliation Failed", state="error", expanded=True)
+                st.error(f"❌ Reconciliation Failed: {e}")
+            except Exception as e:
+                status.update(label="Reconciliation Failed", state="error", expanded=True)
+                st.error(f"❌ An unexpected error occurred: {e}")
 
     else:
         # Date range mode
@@ -662,59 +668,65 @@ def page_reconciliation(session_db):
         st.info(f"📊 Will reconcile **{total_days} days** from {start_date} to {end_date}")
 
         if st.button("▶️ Start Range Reconciliation", type="primary"):
-            # Run matching first
-            with st.spinner("Running Matching Service..."):
-                matcher = MatchingService(session_db)
-                match_stats = matcher.match_notepad_deliveries()
-                mswipe_stats = matcher.match_mswipe_payments()
+            try:
+                with st.status("Running Reconciliation Process...", expanded=True) as status:
+                    # Run matching first
+                    st.write("Running Matching Service...")
+                    matcher = MatchingService(session_db)
+                    match_stats = matcher.match_notepad_deliveries()
+                    mswipe_stats = matcher.match_mswipe_payments()
 
-            # Run range reconciliation with progress bar
-            progress_bar = st.progress(0, text="Starting reconciliation...")
-            status_text = st.empty()
+                    # Run range reconciliation with progress bar
+                    st.write("Processing Date Range...")
+                    progress_bar = st.progress(0, text="Starting reconciliation...")
 
-            def on_progress(current, total):
-                progress_bar.progress(current / total, text=f"Processing day {current}/{total}...")
+                    def on_progress(current, total):
+                        progress_bar.progress(current / total, text=f"Processing day {current}/{total}...")
 
-            recon = ReconciliationService(session_db)
-            totals = recon.run_reconciliation_range(start_date, end_date, progress_callback=on_progress)
+                    recon = ReconciliationService(session_db)
+                    totals = recon.run_reconciliation_range(start_date, end_date, progress_callback=on_progress)
 
-            progress_bar.progress(1.0, text="✅ Complete!")
+                    progress_bar.progress(1.0, text="✅ Complete!")
+                    status.update(label="Range Reconciliation Complete!", state="complete", expanded=False)
 
-            # Show consolidated results
-            st.success(f"✅ Range Reconciliation Complete!")
+                col1, col2, col3, col4 = st.columns(4)
+                col1.metric("Days Processed", totals['days_processed'])
+                col2.metric("Days with Activity", totals['days_with_activity'])
+                col3.metric("Total Exceptions", totals['total_exceptions'])
+                col4.metric("Days with Exceptions", totals['days_with_exceptions'])
 
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Days Processed", totals['days_processed'])
-            col2.metric("Days with Activity", totals['days_with_activity'])
-            col3.metric("Total Exceptions", totals['total_exceptions'])
-            col4.metric("Days with Exceptions", totals['days_with_exceptions'])
+                st.divider()
 
-            st.divider()
+                col_a, col_b, col_c, col_d = st.columns(4)
+                col_a.metric("Order Exceptions", totals['order_exceptions'])
+                col_b.metric("Late Payments", totals['late_payment_exceptions'])
+                col_c.metric("Day Exceptions", totals['day_exceptions'])
+                col_d.metric("Matching",
+                            f"{match_stats.get('exact', 0) + match_stats.get('fuzzy', 0)} notepad, "
+                            f"{mswipe_stats.get('matched', 0)} mswipe")
 
-            col_a, col_b, col_c, col_d = st.columns(4)
-            col_a.metric("Order Exceptions", totals['order_exceptions'])
-            col_b.metric("Late Payments", totals['late_payment_exceptions'])
-            col_c.metric("Day Exceptions", totals['day_exceptions'])
-            col_d.metric("Matching",
-                        f"{match_stats.get('exact', 0) + match_stats.get('fuzzy', 0)} notepad, "
-                        f"{mswipe_stats.get('matched', 0)} mswipe")
+                # Per-day breakdown table
+                per_day = totals.get('per_day', [])
+                if per_day:
+                    with st.expander("📋 Per-Day Breakdown", expanded=False):
+                        day_df = pd.DataFrame(per_day)
+                        day_df['date'] = day_df['date'].astype(str)
+                        # Highlight days with exceptions
+                        st.dataframe(day_df, width='stretch')
 
-            # Per-day breakdown table
-            per_day = totals.get('per_day', [])
-            if per_day:
-                with st.expander("📋 Per-Day Breakdown", expanded=False):
-                    day_df = pd.DataFrame(per_day)
-                    day_df['date'] = day_df['date'].astype(str)
-                    # Highlight days with exceptions
-                    st.dataframe(day_df, width='stretch')
+                # Store range results in session state for the results page
+                st.session_state['range_results'] = totals
+                st.session_state['range_dates'] = (str(start_date), str(end_date))
 
-            # Store range results in session state for the results page
-            st.session_state['range_results'] = totals
-            st.session_state['range_dates'] = (str(start_date), str(end_date))
-
-            if st.button("📊 View Results", type="primary", key="nav_to_results_range"):
-                st.session_state['nav_radio'] = "View Results"
-                st.rerun()
+                if st.button("📊 View Results", type="primary", key="nav_to_results_range"):
+                    st.session_state['nav_radio'] = "View Results"
+                    st.rerun()
+            except LaundryReconcilerError as e:
+                status.update(label="Range Reconciliation Failed", state="error", expanded=True)
+                st.error(f"❌ Range Reconciliation Failed: {e}")
+            except Exception as e:
+                status.update(label="Range Reconciliation Failed", state="error", expanded=True)
+                st.error(f"❌ An unexpected error occurred: {e}")
 
 
 # ── Page: View Results ────────────────────────────────────
