@@ -230,9 +230,9 @@ def render_import_step(step_num, title, desc, key, importer_class, session_db,
 
                 if ok:
                     st.session_state.imports[key] = {'done': True, 'result': result}
-                    st.success(f"✅ {title} imported successfully!")
+                    st.toast(f"✅ {title} imported successfully!")
                     if result and result.get('errors', 0) > 0:
-                        st.warning(f"⚠️ {result['errors']} rows had issues and were skipped")
+                        st.toast(f"⚠️ {result['errors']} rows had issues and were skipped")
                     st.rerun()
                 else:
                     st.error(f"❌ Import failed: {result}")
@@ -338,7 +338,7 @@ def render_notepad_step(session_db, is_unlocked):
                         ok, result = safe_import(importer, uploaded, sheet_name=selected_sheet)
                         if ok:
                             st.session_state.imports['notepad'] = {'done': True, 'result': result}
-                            st.success("✅ Notepad data imported!")
+                            st.toast("✅ Notepad data imported!")
                             st.rerun()
                         else:
                             st.error(f"❌ Import failed: {result}")
@@ -378,7 +378,7 @@ def render_notepad_step(session_db, is_unlocked):
                         'runner_name': entry_runner,
                         'notes': entry_notes,
                     })
-                    st.success(f"Added entry for {entry_customer or entry_order}")
+                    st.toast(f"✅ Added entry for {entry_customer or entry_order}")
                     st.rerun()
 
         # ── Show queued entries ──
@@ -456,7 +456,7 @@ def render_notepad_step(session_db, is_unlocked):
                                 'result': {'total': saved, 'imported': saved, 'errors': 0}
                             }
                             st.session_state.notepad_entries = []
-                            st.success(f"✅ Saved {saved} entries!")
+                            st.toast(f"✅ Saved {saved} entries!")
                             st.rerun()
                         except Exception as ex:
                             session_db.rollback()
@@ -527,9 +527,9 @@ def render_cash_register_step(session_db, is_unlocked):
                 ok, result = safe_import(importer, uploaded, sheet_name=selected_sheet)
                 if ok:
                     st.session_state.imports['cash_register'] = {'done': True, 'result': result}
-                    st.success("✅ Cash Register data imported!")
+                    st.toast("✅ Cash Register data imported!")
                     if result and result.get('errors', 0) > 0:
-                        st.warning(f"⚠️ {result['errors']} rows had issues and were skipped")
+                        st.toast(f"⚠️ {result['errors']} rows had issues and were skipped")
                     st.rerun()
                 else:
                     st.error(f"❌ Import failed: {result}")
@@ -1051,7 +1051,7 @@ def page_results(session_db):
                         ex_obj.resolution_note = note
                         ex_obj.resolved_at = datetime.utcnow()
                         session_db.commit()
-                        st.success(f"Exception {sel_id} marked as '{resolution}'")
+                        st.toast(f"✅ Exception {sel_id} marked as '{resolution}'")
                         st.rerun()
         else:
             st.success("🎉 No exceptions found for this run!")
