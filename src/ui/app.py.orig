@@ -110,13 +110,8 @@ def validate_upload(uploaded_file):
     return True, ""
 
 
-def safe_import(importer, file_obj, suffix=None, **kwargs):
-    # Determine the correct extension to preserve file format (e.g. .csv vs .xlsx)
-    ext = os.path.splitext(file_obj.name)[1]
-    if not ext:
-        ext = suffix if suffix else ".xlsx"
-        
-    with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+def safe_import(importer, file_obj, suffix=".xlsx", **kwargs):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
         tmp.write(file_obj.getbuffer())
         tmp_path = tmp.name
     try:
@@ -153,9 +148,6 @@ def get_import_progress():
     done = sum(1 for v in imports.values() if v.get('done'))
     return done, len(imports)
 
-def navigate_to(page_name):
-    """Helper callback to navigate without StreamlitAPIException."""
-    st.session_state['nav_radio'] = page_name
 
 # ── Step Card Renderer ────────────────────────────────────
 
@@ -207,53 +199,40 @@ def render_import_step(step_num, title, desc, key, importer_class, session_db,
         return
 
     file_types = file_types or ['csv', 'xlsx']
-    uploaded_files = st.file_uploader(f"Upload {title} (Multiple allowed)", type=file_types, key=f"upload_{key}", accept_multiple_files=True)
+    uploaded = st.file_uploader(f"Upload {title}", type=file_types, key=f"upload_{key}")
 
-    if uploaded_files:
-        for uf in uploaded_files:
-            valid, msg = validate_upload(uf)
-            if not valid:
-                st.error(f"{uf.name}: {msg}")
-                return
+    if uploaded:
+        valid, msg = validate_upload(uploaded)
+        if not valid:
+            st.error(msg)
+            return
 
-        # Data preview of first file
-        first_file = uploaded_files[0]
-        with st.expander(f"📋 Preview first 5 rows ({first_file.name})", expanded=False):
+        # Data preview
+        with st.expander("📋 Preview first 5 rows", expanded=False):
             try:
-                if first_file.name.endswith('.csv'):
-                    preview_df = pd.read_csv(first_file, nrows=5)
+                if uploaded.name.endswith('.csv'):
+                    preview_df = pd.read_csv(uploaded, nrows=5)
                 else:
-                    preview_df = pd.read_excel(first_file, nrows=5)
+                    preview_df = pd.read_excel(uploaded, nrows=5)
                 st.dataframe(preview_df.astype(str), width='stretch')
-                first_file.seek(0)  # Reset for import
+                uploaded.seek(0)  # Reset for import
             except Exception:
                 st.warning("Could not preview file")
 
-        if st.button(f"🚀 Import {len(uploaded_files)} File(s) for {title}", key=f"btn_{key}"):
-            with st.spinner(f"Importing {len(uploaded_files)} file(s) for {title}..."):
+        if st.button(f"🚀 Import {title}", key=f"btn_{key}"):
+            with st.spinner(f"Importing {title}..."):
                 importer = importer_class(session_db)
                 kwargs = extra_kwargs or {}
-                
-                total_res = {'total': 0, 'imported': 0, 'errors': 0}
-                all_ok = True
-                
-                for uf in uploaded_files:
-                    ok, result = safe_import(importer, uf, suffix=suffix, **kwargs)
-                    if ok and isinstance(result, dict):
-                        total_res['total'] += result.get('total', 0)
-                        total_res['imported'] += result.get('imported', 0)
-                        total_res['errors'] += result.get('errors', 0)
-                    else:
-                        st.error(f"❌ Import failed for {uf.name}: {result}")
-                        all_ok = False
-                        break
+                ok, result = safe_import(importer, uploaded, suffix=suffix)
 
-                if all_ok:
-                    st.session_state.imports[key] = {'done': True, 'result': total_res}
-                    st.success(f"✅ All {len(uploaded_files)} {title} file(s) imported successfully!")
-                    if total_res['errors'] > 0:
-                        st.warning(f"⚠️ {total_res['errors']} rows had issues and were skipped")
+                if ok:
+                    st.session_state.imports[key] = {'done': True, 'result': result}
+                    st.success(f"✅ {title} imported successfully!")
+                    if result and result.get('errors', 0) > 0:
+                        st.warning(f"⚠️ {result['errors']} rows had issues and were skipped")
                     st.rerun()
+                else:
+                    st.error(f"❌ Import failed: {result}")
 
 
 # ── Notepad Manual Entry Form ─────────────────────────────
@@ -306,76 +285,60 @@ def render_notepad_step(session_db, is_unlocked):
 
     # ── Tab 1: File Upload ──
     with tab_upload:
-        uploaded_files = st.file_uploader("Upload Notepad Excel/CSV (Multiple allowed)", type=['csv', 'xlsx'], key="upload_notepad", accept_multiple_files=True)
-        if uploaded_files:
-            for uf in uploaded_files:
-                valid, msg = validate_upload(uf)
-                if not valid:
-                    st.error(f"{uf.name}: {msg}")
-                    return
+        uploaded = st.file_uploader("Upload Notepad Excel/CSV", type=['csv', 'xlsx'], key="upload_notepad")
+        if uploaded:
+            valid, msg = validate_upload(uploaded)
+            if not valid:
+                st.error(msg)
+            else:
+                # Detect sheets for multi-tab Excel
+                sheet_option = None
+                selected_sheet = 0  # default: first sheet
 
-            first_file = uploaded_files[0]
-            sheet_option = None
-            selected_sheet = 0  # default: first sheet
+                if uploaded.name.endswith(('.xlsx', '.xls')):
+                    try:
+                        xl = pd.ExcelFile(uploaded)
+                        sheet_names = xl.sheet_names
+                        uploaded.seek(0)
 
-            if len(uploaded_files) == 1 and first_file.name.endswith(('.xlsx', '.xls')):
-                try:
-                    xl = pd.ExcelFile(first_file)
-                    sheet_names = xl.sheet_names
-                    first_file.seek(0)
+                        if len(sheet_names) > 1:
+                            st.info(f"📑 This file has **{len(sheet_names)} sheets**: {', '.join(sheet_names)}")
+                            selected_sheets = st.multiselect(
+                                "Select sheets to import",
+                                sheet_names,
+                                default=[sheet_names[0]],
+                                key="np_sheet_select"
+                            )
+                            if selected_sheets:
+                                selected_sheet = selected_sheets if len(selected_sheets) > 1 else selected_sheets[0]
+                            else:
+                                st.warning("Please select at least one sheet")
+                                selected_sheet = None
+                    except Exception:
+                        pass  # Fall through to default (first sheet)
 
-                    if len(sheet_names) > 1:
-                        st.info(f"📑 This file has **{len(sheet_names)} sheets**: {', '.join(sheet_names)}")
-                        selected_sheets = st.multiselect(
-                            "Select sheets to import",
-                            sheet_names,
-                            default=[sheet_names[0]],
-                            key="np_sheet_select"
-                        )
-                        if selected_sheets:
-                            selected_sheet = selected_sheets if len(selected_sheets) > 1 else selected_sheets[0]
+                with st.expander("📋 Preview first 5 rows", expanded=False):
+                    try:
+                        if uploaded.name.endswith('.csv'):
+                            preview = pd.read_csv(uploaded, nrows=5)
                         else:
-                            st.warning("Please select at least one sheet")
-                            selected_sheet = None
-                except Exception:
-                    pass  # Fall through to default (first sheet)
+                            preview_sheet = selected_sheet if selected_sheet != '__all__' else 0
+                            preview = pd.read_excel(uploaded, sheet_name=preview_sheet, nrows=5)
+                        st.dataframe(preview.astype(str), width='stretch')
+                        uploaded.seek(0)
+                    except Exception:
+                        st.warning("Could not preview file")
 
-            with st.expander(f"📋 Preview first 5 rows ({first_file.name})", expanded=False):
-                try:
-                    if first_file.name.endswith('.csv'):
-                        preview = pd.read_csv(first_file, nrows=5)
-                    else:
-                        preview_sheet = selected_sheet if (selected_sheet is not None and selected_sheet != '__all__') else 0
-                        
-                        # handle if selected_sheet is a list (multiselect)
-                        if isinstance(preview_sheet, list) and len(preview_sheet) > 0:
-                            preview_sheet = preview_sheet[0]
-
-                        preview = pd.read_excel(first_file, sheet_name=preview_sheet, nrows=5)
-                    st.dataframe(preview.astype(str), width='stretch')
-                    first_file.seek(0)
-                except Exception:
-                    st.warning("Could not preview file")
-
-            if st.button(f"🚀 Import {len(uploaded_files)} Notepad File(s)", key="btn_notepad_file"):
-                with st.spinner("Importing Notepad data..."):
-                    importer = NotepadImporter(session_db)
-                    total_res = {'total': 0, 'imported': 0, 'errors': 0}
-                    all_ok = True
-                    for uf in uploaded_files:
-                        ok, result = safe_import(importer, uf, sheet_name=selected_sheet)
-                        if ok and isinstance(result, dict):
-                            total_res['total'] += result.get('total', 0)
-                            total_res['imported'] += result.get('imported', 0)
-                            total_res['errors'] += result.get('errors', 0)
+                if st.button("🚀 Import Notepad File", key="btn_notepad_file"):
+                    with st.spinner("Importing Notepad data..."):
+                        importer = NotepadImporter(session_db)
+                        ok, result = safe_import(importer, uploaded, sheet_name=selected_sheet)
+                        if ok:
+                            st.session_state.imports['notepad'] = {'done': True, 'result': result}
+                            st.success("✅ Notepad data imported!")
+                            st.rerun()
                         else:
-                            st.error(f"❌ Import failed for {uf.name}: {result}")
-                            all_ok = False
-                            break
-                    if all_ok:
-                        st.session_state.imports['notepad'] = {'done': True, 'result': total_res}
-                        st.success(f"✅ All {len(uploaded_files)} Notepad file(s) imported!")
-                        st.rerun()
+                            st.error(f"❌ Import failed: {result}")
 
     # ── Tab 2: Manual Entry ──
     with tab_manual:
@@ -393,7 +356,7 @@ def render_notepad_step(session_db, is_unlocked):
             with col2:
                 entry_amount = st.number_input("Amount Collected (₹)", min_value=0.0,
                                               step=10.0, key="np_amount")
-                entry_mode = st.selectbox("Payment Mode", 
+                entry_mode = st.selectbox("Payment Mode",
                                          ["Cash", "Google Pay", "Paytm", "Package", "Card", "Other"],
                                          key="np_mode")
                 entry_notes = st.text_area("Notes (optional)", key="np_notes",
@@ -516,70 +479,57 @@ def render_cash_register_step(session_db, is_unlocked):
     if should_render is not True:
         return
 
-    uploaded_files = st.file_uploader("Upload Cash Register Excel (Multiple allowed)", type=['xlsx'], key="upload_cash_register", accept_multiple_files=True)
-    if uploaded_files:
-        for uf in uploaded_files:
-            valid, msg = validate_upload(uf)
-            if not valid:
-                st.error(f"{uf.name}: {msg}")
-                return
+    uploaded = st.file_uploader("Upload Cash Register Excel", type=['xlsx'], key="upload_cash_register")
+    if uploaded:
+        valid, msg = validate_upload(uploaded)
+        if not valid:
+            st.error(msg)
+            return
 
-        first_file = uploaded_files[0]
+        # Detect sheets for multi-tab Excel
         selected_sheet = 0  # default: first sheet
-        
-        if len(uploaded_files) == 1:
-            try:
-                xl = pd.ExcelFile(first_file)
-                sheet_names = xl.sheet_names
-                first_file.seek(0)
+        try:
+            xl = pd.ExcelFile(uploaded)
+            sheet_names = xl.sheet_names
+            uploaded.seek(0)
 
-                if len(sheet_names) > 1:
-                    st.info(f"📑 This file has **{len(sheet_names)} sheets**: {', '.join(sheet_names)}")
-                    selected_sheets = st.multiselect(
-                        "Select sheets to import",
-                        sheet_names,
-                        default=[sheet_names[0]],
-                        key="cr_sheet_select"
-                    )
-                    if selected_sheets:
-                        selected_sheet = selected_sheets if len(selected_sheets) > 1 else selected_sheets[0]
-                    else:
-                        st.warning("Please select at least one sheet")
-                        return
-            except Exception:
-                pass  # Fall through to default (first sheet)
+            if len(sheet_names) > 1:
+                st.info(f"📑 This file has **{len(sheet_names)} sheets**: {', '.join(sheet_names)}")
+                selected_sheets = st.multiselect(
+                    "Select sheets to import",
+                    sheet_names,
+                    default=[sheet_names[0]],
+                    key="cr_sheet_select"
+                )
+                if selected_sheets:
+                    selected_sheet = selected_sheets if len(selected_sheets) > 1 else selected_sheets[0]
+                else:
+                    st.warning("Please select at least one sheet")
+                    return
+        except Exception:
+            pass  # Fall through to default (first sheet)
 
-        with st.expander(f"📋 Preview first 5 rows ({first_file.name})", expanded=False):
+        with st.expander("📋 Preview first 5 rows", expanded=False):
             try:
                 preview_sheet = selected_sheet if not isinstance(selected_sheet, list) else selected_sheet[0]
-                preview = pd.read_excel(first_file, sheet_name=preview_sheet, nrows=5)
+                preview = pd.read_excel(uploaded, sheet_name=preview_sheet, nrows=5)
                 st.dataframe(preview.astype(str), width='stretch')
-                first_file.seek(0)
+                uploaded.seek(0)
             except Exception:
                 st.warning("Could not preview file")
 
-        if st.button(f"🚀 Import {len(uploaded_files)} Cash Register File(s)", key="btn_cash_register"):
-            with st.spinner(f"Importing {len(uploaded_files)} Cash Register data file(s)..."):
+        if st.button("🚀 Import Cash Register", key="btn_cash_register"):
+            with st.spinner("Importing Cash Register data..."):
                 importer = CashRegisterImporter(session_db)
-                total_res = {'total': 0, 'imported': 0, 'errors': 0}
-                all_ok = True
-                for uf in uploaded_files:
-                    ok, result = safe_import(importer, uf, sheet_name=selected_sheet)
-                    if ok and isinstance(result, dict):
-                        total_res['total'] += result.get('total', 0)
-                        total_res['imported'] += result.get('imported', 0)
-                        total_res['errors'] += result.get('errors', 0)
-                    else:
-                        st.error(f"❌ Import failed for {uf.name}: {result}")
-                        all_ok = False
-                        break
-
-                if all_ok:
-                    st.session_state.imports['cash_register'] = {'done': True, 'result': total_res}
-                    st.success(f"✅ All {len(uploaded_files)} Cash Register file(s) imported!")
-                    if total_res['errors'] > 0:
-                        st.warning(f"⚠️ {total_res['errors']} rows had issues and were skipped")
+                ok, result = safe_import(importer, uploaded, sheet_name=selected_sheet)
+                if ok:
+                    st.session_state.imports['cash_register'] = {'done': True, 'result': result}
+                    st.success("✅ Cash Register data imported!")
+                    if result and result.get('errors', 0) > 0:
+                        st.warning(f"⚠️ {result['errors']} rows had issues and were skipped")
                     st.rerun()
+                else:
+                    st.error(f"❌ Import failed: {result}")
 
 
 # ── Page: Import Wizard ───────────────────────────────────
@@ -603,10 +553,9 @@ def page_import(session_db):
 
     if done == total and total > 0:
         st.success("🎉 All imports complete!")
-        def _nav_to_recon():
+        if st.button("▶️ Go to Run Reconciliation", type="primary", key="nav_to_recon"):
             st.session_state['nav_radio'] = "Run Reconciliation"
-        
-        st.button("▶️ Go to Run Reconciliation", type="primary", key="nav_to_recon", on_click=_nav_to_recon)
+            st.rerun()
 
     # Reset button
     col1, col2 = st.columns([4, 1])
@@ -693,20 +642,19 @@ def page_reconciliation(session_db):
             if success:
                 st.success(f"✅ Reconciliation Complete! Run ID: {run.id}")
 
-                col1, col2, col3, col4, col5 = st.columns(5)
+                col1, col2, col3 = st.columns(3)
                 col1.metric("Notepad Matches",
                            f"{match_stats.get('exact', 0) + match_stats.get('fuzzy', 0)}")
                 col2.metric("MSWIPE Matches", str(mswipe_stats.get('matched', 0)))
                 col3.metric("Exceptions", str(run.summary_stats.get('total_exceptions', 0)))
-                col4.metric("⏰ Ageing Orders", str(run.summary_stats.get('ageing_order_exceptions', 0)))
-                col5.metric("🕵️ Backdated", str(run.summary_stats.get('backdated_payment_exceptions', 0)))
 
                 late = run.summary_stats.get('late_payment_exceptions', 0)
                 if late > 0:
                     st.warning(f"⚠️ {late} late payment(s) detected")
 
-                st.button("📊 View Results", key="nav_to_results_single",
-                          on_click=navigate_to, args=("View Results",))
+                if st.button("📊 View Results", key="nav_to_results_single"):
+                    st.session_state['nav_radio'] = "View Results"
+                    st.rerun()
 
     else:
         # Date range mode
@@ -764,13 +712,11 @@ def page_reconciliation(session_db):
 
                 st.divider()
 
-                col_a, col_b, col_c, col_d, col_e, col_f = st.columns(6)
+                col_a, col_b, col_c, col_d = st.columns(4)
                 col_a.metric("Order Exceptions", totals['order_exceptions'])
                 col_b.metric("Late Payments", totals['late_payment_exceptions'])
                 col_c.metric("Day Exceptions", totals['day_exceptions'])
-                col_d.metric("⏰ Ageing", totals['ageing_order_exceptions'])
-                col_e.metric("🕵️ Backdated", totals['backdated_payment_exceptions'])
-                col_f.metric("Matching",
+                col_d.metric("Matching",
                             f"{match_stats.get('exact', 0) + match_stats.get('fuzzy', 0)} notepad, "
                             f"{mswipe_stats.get('matched', 0)} mswipe")
 
@@ -792,278 +738,6 @@ def page_reconciliation(session_db):
                     st.rerun()
 
 
-# ── Period Summary (Monthly / Quarterly) ─────────────────
-
-def _render_period_summary(session_db, view_mode: str):
-    """Render Monthly or Quarterly period aggregation view."""
-    from src.services.reconciliation import ReconciliationService
-    from calendar import monthrange
-    import datetime
-
-    st.subheader(f"{'📊 Monthly' if 'Monthly' in view_mode else '📊 Quarterly'} Period Summary")
-    st.caption(
-        "Aggregates daily reconciliation data over the period. "
-        "Day-level GPay/cash variances that cancel out within the period are shown as "
-        "self-correcting. Persistent exceptions remain open at the end of the period."
-    )
-
-    today = date.today()
-
-    if "Monthly" in view_mode:
-        col_m, col_y = st.columns(2)
-        month = col_m.selectbox("Month", list(range(1, 13)),
-                                index=today.month - 1,
-                                format_func=lambda m: date(2000, m, 1).strftime('%B'),
-                                key="period_month")
-        year  = col_y.number_input("Year", min_value=2020, max_value=today.year,
-                                   value=today.year, key="period_year")
-        _, last_day = monthrange(int(year), int(month))
-        start_date = date(int(year), int(month), 1)
-        end_date   = date(int(year), int(month), last_day)
-        period_label = start_date.strftime('%B %Y')
-    else:
-        qtr_options = ['Q1 (Jan–Mar)', 'Q2 (Apr–Jun)', 'Q3 (Jul–Sep)', 'Q4 (Oct–Dec)']
-        qtr_starts  = [(1,1), (4,1), (7,1), (10,1)]
-        qtr_ends    = [(3,31),(6,30),(9,30),(12,31)]
-        current_qtr = (today.month - 1) // 3
-        col_q, col_y = st.columns(2)
-        qtr_idx = col_q.selectbox("Quarter", list(range(4)), index=current_qtr,
-                                  format_func=lambda i: qtr_options[i],
-                                  key="period_qtr")
-        year = col_y.number_input("Year", min_value=2020, max_value=today.year,
-                                  value=today.year, key="period_year_q")
-        sm, sd = qtr_starts[qtr_idx]
-        em, ed = qtr_ends[qtr_idx]
-        start_date  = date(int(year), sm, sd)
-        end_date    = date(int(year), em, ed)
-        period_label = f"{qtr_options[qtr_idx]} {int(year)}"
-
-    if st.button(f"📊 Load {period_label} Summary", type="primary", key="load_period"):
-        with st.spinner(f"Computing period summary for {period_label}..."):
-            recon = ReconciliationService(session_db)
-            summary = recon.get_period_summary(start_date, end_date)
-            st.session_state['period_summary'] = summary
-            st.session_state['period_label']   = period_label
-
-    summary = st.session_state.get('period_summary')
-    if not summary:
-        st.info("Select a period and click Load to see the results.")
-        return
-
-    period_label = st.session_state.get('period_label', period_label)
-    st.success(f"Showing period: **{period_label}** "
-               f"({summary.get('runs_completed', 0)} days reconciled "
-               f"of {summary.get('days_in_period', 0)})")
-
-    st.divider()
-
-    # ── Top-level metrics ──────────────────────────────────
-    c1, c2, c3 = st.columns(3)
-    c1.metric("📋 Active Orders",  summary.get('active_orders', 0), help="Total distinct orders touched during this period")
-    c2.metric("⚠️ Total Exceptions", summary.get('total_exceptions', 0), help="Total exceptions generated before period netting")
-    c3.metric("⚠️ Persistent", summary.get('persistent_exceptions_count', 0), help="Exceptions that remain open and unresolved at the end of the period")
-    
-    st.write("")
-    
-    c4, c5, c6 = st.columns(3)
-    c4.metric("🔄 Self-Correcting", summary.get('self_correcting_pairs', 0),
-              help="Day-level cash/GPay variances that canceled each other out within this period")
-    c5.metric("⏰ Ageing", summary.get('ageing_order_count', 0), help="Orders older than the threshold missing a delivery confirmation")
-    c6.metric("🕵️ Backdated", summary.get('backdated_count', 0), help="Payments matched to historical discrepancies or delayed MSWIPE sweeps")
-
-    st.divider()
-
-    # ── Payment variance netting ───────────────────────────
-    col_gpay, col_cash = st.columns(2)
-    with col_gpay:
-        st.subheader("💳 GPay Net Variance")
-        net_g = summary.get('net_gpay_variance', 0)
-        st.metric("CRM GPay Total",  f"₹{summary.get('crm_gpay_total', 0):,.0f}")
-        st.metric("MSWIPE Total",    f"₹{summary.get('mswipe_total', 0):,.0f}")
-        color = "normal" if abs(net_g) <= 10 else "inverse"
-        st.metric("Net Variance", f"₹{net_g:,.0f}", delta=f"₹{net_g:,.0f}",
-                  delta_color=color)
-        if abs(net_g) <= 10:
-            st.success("✅ GPay balances within tolerance for this period.")
-        else:
-            st.error(f"⚠️ GPay net variance of ₹{net_g:,.0f} persists for the period.")
-
-    with col_cash:
-        st.subheader("💵 Cash Net Variance")
-        net_c = summary.get('net_cash_variance', 0)
-        st.metric("Notepad Cash Total",   f"₹{summary.get('notepad_cash_total', 0):,.0f}")
-        st.metric("Register Cash Total",  f"₹{summary.get('register_cash_total', 0):,.0f}")
-        color = "normal" if abs(net_c) <= 100 else "inverse"
-        st.metric("Net Variance", f"₹{net_c:,.0f}", delta=f"₹{net_c:,.0f}",
-                  delta_color=color)
-        if abs(net_c) <= 100:
-            st.success("✅ Cash balances within tolerance for this period.")
-        else:
-            st.error(f"⚠️ Cash net variance of ₹{net_c:,.0f} persists for the period.")
-
-    st.divider()
-
-    # ── Persistent exceptions table ────────────────────────
-    persistent = summary.get('persistent_exceptions', [])
-    if persistent:
-        st.subheader(f"⚠️ Persistent Exceptions ({len(persistent)})")
-        st.caption("These exceptions remain open even after period-level netting.")
-        p_rows = []
-        for ex in persistent:
-            p_rows.append({
-                'Date':     ex.get('run_date', '—'),
-                'Type':     ex.get('type', '—'),
-                'Severity': '🔴' if ex.get('severity') == 'high' else
-                            '🟡' if ex.get('severity') == 'medium' else '🟢',
-                'Action':   ex.get('action', '—'),
-            })
-        st.dataframe(pd.DataFrame(p_rows), width='stretch', hide_index=True)
-    else:
-        st.success("🎉 No persistent exceptions for this period!")
-
-    # ── Per-day breakdown ──────────────────────────────────
-    per_day = summary.get('per_day', [])
-    if per_day:
-        with st.expander("📋 Per-Day Breakdown", expanded=False):
-            st.dataframe(pd.DataFrame(per_day), width='stretch', hide_index=True)
-
-
-# ── Period Summary (Monthly / Quarterly) ─────────────────
-
-def _render_period_summary(session_db, view_mode: str):
-    """Render Monthly or Quarterly period aggregation view."""
-    from src.services.reconciliation import ReconciliationService
-    from calendar import monthrange
-    import datetime
-
-    st.subheader(f"{'📊 Monthly' if 'Monthly' in view_mode else '📊 Quarterly'} Period Summary")
-    st.caption(
-        "Aggregates daily reconciliation data over the period. "
-        "Day-level GPay/cash variances that cancel out within the period are shown as "
-        "self-correcting. Persistent exceptions remain open at the end of the period."
-    )
-
-    today = date.today()
-
-    if "Monthly" in view_mode:
-        col_m, col_y = st.columns(2)
-        month = col_m.selectbox("Month", list(range(1, 13)),
-                                index=today.month - 1,
-                                format_func=lambda m: date(2000, m, 1).strftime('%B'),
-                                key="period_month")
-        year  = col_y.number_input("Year", min_value=2020, max_value=today.year,
-                                   value=today.year, key="period_year")
-        _, last_day = monthrange(int(year), int(month))
-        start_date = date(int(year), int(month), 1)
-        end_date   = date(int(year), int(month), last_day)
-        period_label = start_date.strftime('%B %Y')
-    else:
-        qtr_options = ['Q1 (Jan–Mar)', 'Q2 (Apr–Jun)', 'Q3 (Jul–Sep)', 'Q4 (Oct–Dec)']
-        qtr_starts  = [(1,1), (4,1), (7,1), (10,1)]
-        qtr_ends    = [(3,31),(6,30),(9,30),(12,31)]
-        current_qtr = (today.month - 1) // 3
-        col_q, col_y = st.columns(2)
-        qtr_idx = col_q.selectbox("Quarter", list(range(4)), index=current_qtr,
-                                  format_func=lambda i: qtr_options[i],
-                                  key="period_qtr")
-        year = col_y.number_input("Year", min_value=2020, max_value=today.year,
-                                  value=today.year, key="period_year_q")
-        sm, sd = qtr_starts[qtr_idx]
-        em, ed = qtr_ends[qtr_idx]
-        start_date  = date(int(year), sm, sd)
-        end_date    = date(int(year), em, ed)
-        period_label = f"{qtr_options[qtr_idx]} {int(year)}"
-
-    if st.button(f"📊 Load {period_label} Summary", type="primary", key="load_period"):
-        with st.spinner(f"Computing period summary for {period_label}..."):
-            recon = ReconciliationService(session_db)
-            summary = recon.get_period_summary(start_date, end_date)
-            st.session_state['period_summary'] = summary
-            st.session_state['period_label']   = period_label
-
-    summary = st.session_state.get('period_summary')
-    if not summary:
-        st.info("Select a period and click Load to see the results.")
-        return
-
-    period_label = st.session_state.get('period_label', period_label)
-    st.success(f"Showing period: **{period_label}** "
-               f"({summary.get('runs_completed', 0)} days reconciled "
-               f"of {summary.get('days_in_period', 0)})")
-
-    st.divider()
-
-    # ── Top-level metrics ──────────────────────────────────
-    c1, c2, c3 = st.columns(3)
-    c1.metric("📋 Active Orders",  summary.get('active_orders', 0), help="Total distinct orders touched during this period")
-    c2.metric("⚠️ Total Exceptions", summary.get('total_exceptions', 0), help="Total exceptions generated before period netting")
-    c3.metric("⚠️ Persistent", summary.get('persistent_exceptions_count', 0), help="Exceptions that remain open and unresolved at the end of the period")
-    
-    st.write("")
-    
-    c4, c5, c6 = st.columns(3)
-    c4.metric("🔄 Self-Correcting", summary.get('self_correcting_pairs', 0),
-              help="Day-level cash/GPay variances that canceled each other out within this period")
-    c5.metric("⏰ Ageing", summary.get('ageing_order_count', 0), help="Orders older than the threshold missing a delivery confirmation")
-    c6.metric("🕵️ Backdated", summary.get('backdated_count', 0), help="Payments matched to historical discrepancies or delayed MSWIPE sweeps")
-
-    st.divider()
-
-    # ── Payment variance netting ───────────────────────────
-    col_gpay, col_cash = st.columns(2)
-    with col_gpay:
-        st.subheader("💳 GPay Net Variance")
-        net_g = summary.get('net_gpay_variance', 0)
-        st.metric("CRM GPay Total",  f"₹{summary.get('crm_gpay_total', 0):,.0f}")
-        st.metric("MSWIPE Total",    f"₹{summary.get('mswipe_total', 0):,.0f}")
-        color = "normal" if abs(net_g) <= 10 else "inverse"
-        st.metric("Net Variance", f"₹{net_g:,.0f}", delta=f"₹{net_g:,.0f}",
-                  delta_color=color)
-        if abs(net_g) <= 10:
-            st.success("✅ GPay balances within tolerance for this period.")
-        else:
-            st.error(f"⚠️ GPay net variance of ₹{net_g:,.0f} persists for the period.")
-
-    with col_cash:
-        st.subheader("💵 Cash Net Variance")
-        net_c = summary.get('net_cash_variance', 0)
-        st.metric("Notepad Cash Total",   f"₹{summary.get('notepad_cash_total', 0):,.0f}")
-        st.metric("Register Cash Total",  f"₹{summary.get('register_cash_total', 0):,.0f}")
-        color = "normal" if abs(net_c) <= 100 else "inverse"
-        st.metric("Net Variance", f"₹{net_c:,.0f}", delta=f"₹{net_c:,.0f}",
-                  delta_color=color)
-        if abs(net_c) <= 100:
-            st.success("✅ Cash balances within tolerance for this period.")
-        else:
-            st.error(f"⚠️ Cash net variance of ₹{net_c:,.0f} persists for the period.")
-
-    st.divider()
-
-    # ── Persistent exceptions table ────────────────────────
-    persistent = summary.get('persistent_exceptions', [])
-    if persistent:
-        st.subheader(f"⚠️ Persistent Exceptions ({len(persistent)})")
-        st.caption("These exceptions remain open even after period-level netting.")
-        p_rows = []
-        for ex in persistent:
-            p_rows.append({
-                'Date':     ex.get('run_date', '—'),
-                'Type':     ex.get('type', '—'),
-                'Severity': '🔴' if ex.get('severity') == 'high' else
-                            '🟡' if ex.get('severity') == 'medium' else '🟢',
-                'Action':   ex.get('action', '—'),
-            })
-        st.dataframe(pd.DataFrame(p_rows), width='stretch', hide_index=True)
-    else:
-        st.success("🎉 No persistent exceptions for this period!")
-
-    # ── Per-day breakdown ──────────────────────────────────
-    per_day = summary.get('per_day', [])
-    if per_day:
-        with st.expander("📋 Per-Day Breakdown", expanded=False):
-            st.dataframe(pd.DataFrame(per_day), width='stretch', hide_index=True)
-
-
 # ── Page: View Results ────────────────────────────────────
 
 def page_results(session_db):
@@ -1072,26 +746,17 @@ def page_results(session_db):
     runs = session_db.query(ReconciliationRun).order_by(ReconciliationRun.run_date.desc()).all()
     if not runs:
         st.info("No reconciliation runs found. You need to run reconciliation first.")
-        st.button("▶️ Go to Run Reconciliation", type="primary", key="nav_to_recon_empty_results",
-                  on_click=navigate_to, args=("Run Reconciliation",))
+        if st.button("▶️ Go to Run Reconciliation", type="primary", key="nav_to_recon_empty_results"):
+            st.session_state['nav_radio'] = "Run Reconciliation"
+            st.rerun()
         return
 
     # View mode selector
-    view_mode = st.radio(
-        "View Mode",
-        ["📅 Single Run", "📆 Date Range", "📊 Monthly", "📊 Quarterly"],
-        horizontal=True, key="results_view_mode"
-    )
-
-    # ── Period Summary Views (Monthly / Quarterly) ────────
-    if view_mode in ("📊 Monthly", "📊 Quarterly"):
-        _render_period_summary(session_db, view_mode)
-        return
+    view_mode = st.radio("View Mode", ["📅 Single Run", "📆 Date Range"], horizontal=True, key="results_view_mode")
 
     if view_mode == "📅 Single Run":
         run_options = {f"{r.run_date} (ID: {r.id})": r.id for r in runs}
-        col_run, _ = st.columns([1, 2])
-        selected_label = col_run.selectbox("Select Reconciliation Run", list(run_options.keys()))
+        selected_label = st.selectbox("Select Reconciliation Run", list(run_options.keys()))
         selected_id = run_options[selected_label]
         run = session_db.get(ReconciliationRun, selected_id)
         selected_runs = [run]
@@ -1110,12 +775,7 @@ def page_results(session_db):
 
         selected_runs = [r for r in runs if start_dt <= r.run_date <= end_dt]
         run_ids = [r.id for r in selected_runs]
-        
-        # Shorten date label to prevent UI truncation e.g. "Nov 01 - Nov 30, '25"
-        if start_dt.year == end_dt.year:
-            date_label = f"{start_dt.strftime('%b %d')} - {end_dt.strftime('%b %d, %Y')}"
-        else:
-            date_label = f"{start_dt.strftime('%b %d, %Y')} - {end_dt.strftime('%b %d, %Y')}"
+        date_label = f"{start_dt} to {end_dt}"
 
         if not selected_runs:
             st.warning(f"No reconciliation runs found between {start_dt} and {end_dt}.")
@@ -1170,9 +830,8 @@ def page_results(session_db):
     selected_id = run.id
 
     # ── Tabs ──
-    tab_overview, tab_orders, tab_exceptions, tab_cross_source, tab_ageing, tab_backdated, tab_unmatched, tab_export = st.tabs([
-        "📈 Overview", "📋 Orders", "⚠️ Exceptions",
-        "🔍 Cross-Source", "⏰ Ageing", "🕵️ Backdated",
+    tab_overview, tab_orders, tab_exceptions, tab_unmatched, tab_export = st.tabs([
+        "📈 Overview", "📋 Reconciled Orders", "⚠️ Exceptions",
         "❓ Unmatched", "📥 Export"
     ])
 
@@ -1188,25 +847,13 @@ def page_results(session_db):
         late_ex = sum(
             (r.summary_stats or {}).get('late_payment_exceptions', 0) for r in selected_runs
         )
-        ageing_ex = sum(
-            (r.summary_stats or {}).get('ageing_order_exceptions', 0) for r in selected_runs
-        )
-        backdated_ex = sum(
-            (r.summary_stats or {}).get('backdated_payment_exceptions', 0) for r in selected_runs
-        )
-        row1_cols = st.columns(4)
-        row1_cols[0].metric("📅 Period", date_label, help=f"Reconciliation period: {date_label}")
-        row1_cols[1].metric("✅ Runs", str(len(selected_runs)), help="Number of daily runs included in this view")
-        row1_cols[2].metric("📋 Orders", str(len(recon_orders)), help="Total unique orders reconciled")
-        row1_cols[3].metric("⚠️ Exceptions", str(total_ex), help="Total number of exceptions flagged")
 
-        st.write("") # slight vertical spacing
-        
-        row2_cols = st.columns(4)
-        row2_cols[0].metric("⏰ Late Payments", str(late_ex), help="Payments received after the delivery threshold")
-        row2_cols[1].metric("⏰ Ageing", str(ageing_ex), help="Old orders without delivery completely fulfilled")
-        row2_cols[2].metric("🕵️ Backdated", str(backdated_ex), help="Payments correlated with past surpluses or delayed sweeps")
-        # Empty 4th column for alignment consistency
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("📅 Period", date_label)
+        col2.metric("✅ Runs", str(len(selected_runs)))
+        col3.metric("📋 Orders", str(len(recon_orders)))
+        col4.metric("⚠️ Exceptions", str(total_ex))
+        col5.metric("⏰ Late Payments", str(late_ex))
 
         st.divider()
 
@@ -1411,158 +1058,7 @@ def page_results(session_db):
             st.success("🎉 No exceptions found for this run!")
 
     # ══════════════════════════════════════════════════════
-    # TAB 4: Cross-Source Drill-Down
-    # ══════════════════════════════════════════════════════
-    with tab_cross_source:
-        st.subheader("🔍 Cross-Source Payment Verification")
-        st.caption(
-            "Orders where a CRM payment could not be confirmed by the expected external source "
-            "(MSWIPE for GPay, Cash Register for Cash, Notepad for Paytm/Online/Package). "
-            "Also includes payments collected per Notepad but absent from CRM."
-        )
-
-        cross_source_types = {
-            'GPayOrderMismatch':        ('💳 GPay → No MSWIPE',      'medium'),
-            'CashOrderNoRegister':      ('💵 Cash → No Register',     'medium'),
-            'PaymentNotConfirmedByNotepad': ('📋 Online/Paytm → No Notepad', 'low'),
-            'NotepadPaymentNotInCRM':   ('📝 Notepad Payment → No CRM', 'high'),
-        }
-
-        cross_exceptions = [e for e in exceptions
-                            if e.exception_type in cross_source_types]
-
-        if not cross_exceptions:
-            st.success("✅ All payments confirmed across sources.")
-        else:
-            # Metric summary
-            cs_cols = st.columns(len(cross_source_types))
-            for i, (exc_type, (label, _)) in enumerate(cross_source_types.items()):
-                cnt = sum(1 for e in cross_exceptions if e.exception_type == exc_type)
-                cs_cols[i].metric(label, cnt)
-
-            st.divider()
-
-            # Group by exception type with an expander per group
-            for exc_type, (label, default_sev) in cross_source_types.items():
-                grp = [e for e in cross_exceptions if e.exception_type == exc_type]
-                if not grp:
-                    continue
-
-                with st.expander(f"{label} — **{len(grp)} order(s)**", expanded=True):
-                    rows = []
-                    for e in grp:
-                        ev = e.evidence or {}
-                        rows.append({
-                            'Order #': e.order.order_number if e.order else '—',
-                            'Customer': e.order.customer_name if e.order else '—',
-                            'Amount': f"₹{ev.get('crm_amount') or ev.get('notepad_amount', 0):,.0f}",
-                            'Mode': ev.get('payment_mode') or ev.get('notepad_mode', '—'),
-                            'Missing Source': ev.get('missing_source', 'CRM'),
-                            'Date': ev.get('crm_date') or ev.get('notepad_date', '—'),
-                            'Severity': '🔴' if e.severity == 'high' else '🟡' if e.severity == 'medium' else '🟢',
-                            'Action': e.suggested_action or '—',
-                        })
-                    st.dataframe(pd.DataFrame(rows), width='stretch', hide_index=True)
-
-    # ══════════════════════════════════════════════════════
-    # TAB 5: Ageing Orders
-    # ══════════════════════════════════════════════════════
-    with tab_ageing:
-        st.subheader("⏰ Ageing Orders — Sev 1")
-        st.caption(
-            "Orders older than the configured threshold (default 10 days) with no delivery "
-            "recorded in CRM or Delivery Notes, and an outstanding balance. "
-            "These require immediate follow-up with the delivery team."
-        )
-
-        ageing_exceptions = [e for e in exceptions if e.exception_type == 'AgeingOrder']
-
-        if not ageing_exceptions:
-            st.success("✅ No ageing orders found.")
-        else:
-            st.error(f"🔴 **{len(ageing_exceptions)} ageing order(s)** require immediate attention.")
-
-            ageing_rows = []
-            for e in sorted(ageing_exceptions,
-                            key=lambda x: x.evidence.get('days_since_order', 0) if x.evidence else 0,
-                            reverse=True):
-                ev = e.evidence or {}
-                ageing_rows.append({
-                    'Order #': e.order.order_number if e.order else '—',
-                    'Customer': e.order.customer_name if e.order else '—',
-                    'Order Date': ev.get('order_date', '—'),
-                    'Days Since Order': ev.get('days_since_order', '—'),
-                    'Order Amount': f"₹{ev.get('order_amount', 0):,.0f}",
-                    'Balance Due': f"₹{ev.get('balance', 0):,.0f}",
-                    'Severity': '🔴 High',
-                    'Action': e.suggested_action or '—',
-                })
-            st.dataframe(pd.DataFrame(ageing_rows), width='stretch', hide_index=True)
-            total_ageing_balance = sum(
-                (e.evidence or {}).get('balance', 0) for e in ageing_exceptions
-            )
-            st.error(f"**Total outstanding balance in ageing orders: ₹{total_ageing_balance:,.0f}**")
-
-    # ══════════════════════════════════════════════════════
-    # TAB 6: Backdated Payments
-    # ══════════════════════════════════════════════════════
-    with tab_backdated:
-        st.subheader("🕵️ Backdated Payment Detections")
-        st.caption(
-            "Payments recorded in CRM on one date but whose actual receipt date (per MSWIPE "
-            "or Cash Register correlation) appears to be a different date. "
-            "GPay matches are precise; Cash matches are probabilistic leads for investigation."
-        )
-
-        gpay_backdated = [e for e in exceptions if e.exception_type == 'BackdatedGPayPayment']
-        cash_backdated = [e for e in exceptions if e.exception_type == 'SuspectedBackdatedCashPayment']
-
-        if not gpay_backdated and not cash_backdated:
-            st.success("✅ No backdated payment patterns detected.")
-        else:
-            col_bg, col_bc = st.columns(2)
-            col_bg.metric("💳 Backdated GPay", len(gpay_backdated))
-            col_bc.metric("💵 Suspected Cash", len(cash_backdated))
-
-            if gpay_backdated:
-                st.divider()
-                st.markdown("**💳 Backdated GPay Payments** *(confirmed via MSWIPE)*")
-                gp_rows = []
-                for e in gpay_backdated:
-                    ev = e.evidence or {}
-                    gp_rows.append({
-                        'Order #': e.order.order_number if e.order else '—',
-                        'Customer': e.order.customer_name if e.order else '—',
-                        'Amount': f"₹{ev.get('crm_amount', 0):,.0f}",
-                        'CRM Recorded Date': ev.get('crm_recorded_date', '—'),
-                        'MSWIPE Actual Date': ev.get('mswipe_actual_date', '—'),
-                        'Days Offset': ev.get('days_offset', '—'),
-                        'Action': e.suggested_action or '—',
-                    })
-                st.dataframe(pd.DataFrame(gp_rows), width='stretch', hide_index=True)
-
-            if cash_backdated:
-                st.divider()
-                st.markdown("**💵 Suspected Backdated Cash Payments** *(probabilistic — investigate)*")
-                st.info(
-                    "These are leads, not confirmed matches. A cash deficit on one date "
-                    "correlates with a surplus on another date. Review manually."
-                )
-                bc_rows = []
-                for e in cash_backdated:
-                    ev = e.evidence or {}
-                    bc_rows.append({
-                        'Deficit Date': ev.get('deficit_date', '—'),
-                        'Deficit (₹)': f"₹{ev.get('deficit_amount', 0):,.0f}",
-                        'Surplus Date': ev.get('surplus_date', '—'),
-                        'Surplus (₹)': f"₹{ev.get('surplus_amount', 0):,.0f}",
-                        'Days Apart': ev.get('days_offset', '—'),
-                        'Action': e.suggested_action or '—',
-                    })
-                st.dataframe(pd.DataFrame(bc_rows), width='stretch', hide_index=True)
-
-    # ══════════════════════════════════════════════════════
-    # TAB 7: Unmatched Entries
+    # TAB 4: Unmatched Entries
     # ══════════════════════════════════════════════════════
     with tab_unmatched:
         col_np, col_ms = st.columns(2)
@@ -1597,7 +1093,7 @@ def page_results(session_db):
                 st.success("All MSWIPE entries matched!")
 
     # ══════════════════════════════════════════════════════
-    # TAB 8: Export
+    # TAB 5: Export
     # ══════════════════════════════════════════════════════
     with tab_export:
         st.subheader("📥 Export to Excel")
@@ -1646,8 +1142,9 @@ def page_history(session_db):
         st.dataframe(pd.DataFrame(history), width='stretch')
     else:
         st.info("No reconciliation history yet.")
-        st.button("▶️ Go to Run Reconciliation", type="primary", key="nav_to_recon_empty_history",
-                  on_click=navigate_to, args=("Run Reconciliation",))
+        if st.button("▶️ Go to Run Reconciliation", type="primary", key="nav_to_recon_empty_history"):
+            st.session_state['nav_radio'] = "Run Reconciliation"
+            st.rerun()
 
 
 # ── Main App ──────────────────────────────────────────────
