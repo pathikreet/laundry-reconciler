@@ -44,16 +44,16 @@ class MSwipeImporter(BaseImporter):
                 continue
 
             # Date (prefer transaction/customer payment date over merchant settlement date)
-            date_val = get_val(['TxnDate', 'TransactionDate', 'Transaction Date', 'PaymentDate', 'Payment Date'])
+            date_val = get_val(['TxnDate', 'TransactionDate', 'Transaction Date', 'PaymentDate', 'Payment Date', 'Tx Date Time'])
             payment_date = self._parse_date(date_val)
             if not payment_date:
                 continue
 
             # Mode
-            mode = str(get_val(['Interchange', 'CardType', 'PayeeVPA', 'PaymentMode']) or 'Card').strip()
+            mode = str(get_val(['Interchange', 'CardType', 'PayeeVPA', 'PaymentMode', 'Mode Of Payment']) or 'Card').strip()
 
             # Ref IDs
-            ref_id = str(get_val(['RR_NO', 'Stan_No', 'Mswipe_Ref_No', 'ARN', 'RefId']) or '').strip()
+            ref_id = str(get_val(['RR_NO', 'Stan_No', 'Mswipe_Ref_No', 'ARN', 'RefId', 'RR No']) or '').strip()
 
             normalized_row = {
                 'payment_date': payment_date,

@@ -34,6 +34,37 @@ class NotepadImporter(BaseImporter):
                 df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
             else:
                 df = pd.read_excel(file_path, sheet_name=sheet_name)
+        
+        # Look for headerless files where pandas ingested the first data row as the header
+        # Delivery notes files often lack headers. We check if the first column name looks like an Order Number
+        if not df.empty:
+            col_0 = str(df.columns[0]).strip()
+            if col_0.startswith('T') and col_0[1:].isdigit():
+                logger.info("Detected headerless notepad file, extracting data from headers...")
+                # Recover the first row from the columns
+                first_row_data = df.columns.tolist()
+                for i, val in enumerate(first_row_data):
+                    if str(val).startswith('Unnamed:'):
+                        first_row_data[i] = None
+                header_df = pd.DataFrame([first_row_data], columns=df.columns)
+                df = pd.concat([header_df, df], ignore_index=True)
+                
+                # Apply standard column names in order
+                expected_cols = ['Order Number', 'Customer Name', 'Amount', 'Payment Mode', 'Delivery Date', 'Runner Name', 'Notes']
+                new_cols = expected_cols.copy()
+                
+                # Handle varying number of columns
+                if len(df.columns) > len(expected_cols):
+                    for i in range(len(df.columns) - len(expected_cols)):
+                        new_cols.append(f'Extra_{i}')
+                elif len(df.columns) < len(expected_cols):
+                    for missing_col in expected_cols[len(df.columns):]:
+                        df[missing_col] = None
+                        new_cols.append(missing_col)
+                        
+                df.columns = new_cols[:len(df.columns)]
+
+
         df = df.where(pd.notnull(df), None)
         return df.to_dict(orient='records')
 

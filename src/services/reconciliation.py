@@ -1,7 +1,7 @@
 import logging
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
-from datetime import date
+from datetime import date, timedelta
 from typing import List, Dict, Any, Optional
 from src.models.orders import Order
 from src.models.payments import PaymentEvent
@@ -50,6 +50,8 @@ class ReconciliationService:
             order_exceptions = self._check_order_rules(run_date, run.id)
             late_exceptions = self._check_late_payments(run_date, run.id)
             day_exceptions = self._check_day_rules(run_date, run.id)
+            ageing_exceptions = self._check_ageing_orders(run_date, run.id)
+            backdated_exceptions = self._check_backdated_payments(run_date, run.id)
 
             # Update summary
             run.status = 'complete'
@@ -58,13 +60,16 @@ class ReconciliationService:
                 'order_exceptions': order_exceptions,
                 'late_payment_exceptions': late_exceptions,
                 'day_exceptions': day_exceptions,
-                'total_exceptions': order_exceptions + late_exceptions + day_exceptions,
+                'ageing_order_exceptions': ageing_exceptions,
+                'backdated_payment_exceptions': backdated_exceptions,
+                'total_exceptions': order_exceptions + late_exceptions + day_exceptions + ageing_exceptions + backdated_exceptions,
             }
             self.db.commit()
 
             logger.info(
-                "Reconciliation complete for %s: %d order exceptions, %d day exceptions",
-                run_date, order_exceptions, day_exceptions
+                "Reconciliation complete for %s: %d order exceptions, %d day exceptions, "
+                "%d ageing, %d backdated",
+                run_date, order_exceptions, day_exceptions, ageing_exceptions, backdated_exceptions
             )
             return run
 
@@ -98,6 +103,8 @@ class ReconciliationService:
             'order_exceptions': 0,
             'late_payment_exceptions': 0,
             'day_exceptions': 0,
+            'ageing_order_exceptions': 0,
+            'backdated_payment_exceptions': 0,
             'total_exceptions': 0,
             'days_processed': 0,
             'days_with_exceptions': 0,
@@ -120,6 +127,8 @@ class ReconciliationService:
                 totals['order_exceptions'] += stats.get('order_exceptions', 0)
                 totals['late_payment_exceptions'] += stats.get('late_payment_exceptions', 0)
                 totals['day_exceptions'] += stats.get('day_exceptions', 0)
+                totals['ageing_order_exceptions'] += stats.get('ageing_order_exceptions', 0)
+                totals['backdated_payment_exceptions'] += stats.get('backdated_payment_exceptions', 0)
                 totals['total_exceptions'] += exc_count
 
                 if exc_count > 0:
@@ -179,6 +188,9 @@ class ReconciliationService:
         Rules:
         1. Delivery status mismatch (CRM vs Notepad)
         2. Credit policy violation (unpaid deliveries)
+        3. Notepad amount mismatch vs CRM
+        4. Notepad payment not recorded in CRM
+        5. Per-order cross-source payment verification
 
         Returns:
             Count of exceptions created.
@@ -193,6 +205,8 @@ class ReconciliationService:
             exception_count += self._check_delivery_status(order, run_date, run_id)
             exception_count += self._check_credit_policy(order, run_date, run_id)
             exception_count += self._check_notepad_amount_mismatch(order, run_date, run_id)
+            exception_count += self._check_notepad_payment_not_in_crm(order, run_date, run_id)
+            exception_count += self._check_per_order_payment_source(order, run_date, run_id)
 
         return exception_count
 
@@ -231,7 +245,7 @@ class ReconciliationService:
                 if days_late > threshold:
                     self._create_exception(
                         run_id, delivery.order_id, 'medium', 'LatePayment',
-                        reason_tags=['late_payment'],
+                        tags=['late_payment'],
                         evidence={
                             'delivery_date': str(delivery.delivery_date),
                             'payment_date': str(payment.payment_date),
@@ -239,7 +253,7 @@ class ReconciliationService:
                             'amount': float(payment.amount),
                             'payment_mode': payment.payment_mode,
                         },
-                        suggested_action=f'Review: payment of ₹{float(payment.amount)} received {days_late} days after delivery',
+                        action=f'Review: payment of ₹{float(payment.amount)} received {days_late} days after delivery',
                     )
                     count += 1
                     logger.info(
@@ -282,6 +296,12 @@ class ReconciliationService:
         the Sales report and may not contain delivery info.
         """
         count = 0
+
+        # Skip notepad-vs-CRM checks before notepad data was available
+        notepad_from = self.settings.notepad_available_from
+        if notepad_from and run_date < notepad_from:
+            return 0
+
         notepad_delivery = next((d for d in order.deliveries if d.source == 'notepad'), None)
         crm_delivery = next((d for d in order.deliveries if d.source == 'crm'), None)
 
@@ -315,6 +335,11 @@ class ReconciliationService:
         A violation occurs when an order is delivered but the outstanding
         balance exceeds the credit tolerance threshold.
         """
+        # Credit policy requires notepad delivery confirmation
+        notepad_from = self.settings.notepad_available_from
+        if notepad_from and run_date < notepad_from:
+            return 0
+
         notepad_delivery = next((d for d in order.deliveries if d.source == 'notepad'), None)
         if not notepad_delivery or notepad_delivery.delivery_date != run_date:
             return 0
@@ -343,6 +368,11 @@ class ReconciliationService:
         a mismatch beyond amount_tolerance, flag it for review.
         """
         # Get notepad deliveries for this order on run_date
+        # Skip notepad checks before notepad data was available
+        notepad_from = self.settings.notepad_available_from
+        if notepad_from and run_date < notepad_from:
+            return 0
+
         notepad_deliveries = [
             d for d in order.deliveries
             if d.source == 'notepad' and d.delivery_date == run_date
@@ -378,6 +408,529 @@ class ReconciliationService:
             )
             return 1
         return 0
+
+    # ── Feature 3: Notepad Payment Not in CRM ────────────────
+
+    def _check_notepad_payment_not_in_crm(self, order: Order, run_date: date, run_id: int) -> int:
+        """
+        Flag orders where notepad records a payment but CRM has none.
+
+        This happens when staff collect payment and note it in the delivery
+        book but forget to update the CRM. The CRM balance will look
+        unpaid even though money was collected.
+
+        Severity: high — CRM is out of sync with actual collections.
+        """
+        notepad_from = self.settings.notepad_available_from
+        if notepad_from and run_date < notepad_from:
+            return 0
+
+        # Notepad payment on run_date for this order with non-zero amount
+        notepad_payments = [
+            p for p in order.payments
+            if p.source == 'notepad'
+            and p.payment_date == run_date
+            and float(p.amount) > 0
+        ]
+        if not notepad_payments:
+            return 0
+
+        # CRM payments for this order (any date — if CRM has any it's been entered)
+        crm_payments = [p for p in order.payments if p.source == 'crm']
+        if crm_payments:
+            return 0  # CRM has data — no gap
+
+        notepad_total = sum(float(p.amount) for p in notepad_payments)
+        self._create_exception(
+            run_id, order.id, 'high', 'NotepadPaymentNotInCRM',
+            tags=['MissingCRMPayment'],
+            evidence={
+                'notepad_amount': round(notepad_total, 2),
+                'notepad_date': str(run_date),
+                'notepad_mode': notepad_payments[0].payment_mode,
+                'crm_payments': 0,
+            },
+            action=f'Update CRM with payment of ₹{notepad_total:.0f} '
+                            f'collected on {run_date}'
+        )
+        logger.info(
+            "NotepadPaymentNotInCRM for %s: ₹%.2f on %s not in CRM",
+            order.order_number, notepad_total, run_date
+        )
+        return 1
+
+    # ── Feature 1: Per-Order Cross-Source Verification ────────
+
+    def _check_per_order_payment_source(self, order: Order, run_date: date, run_id: int) -> int:
+        """
+        Verify each CRM payment on run_date is confirmed by the expected
+        external source for that payment mode.
+
+        +---------------------+---------------------------+------------------------------+
+        | CRM Mode            | Expected external source  | Exception if missing         |
+        +---------------------+---------------------------+------------------------------+
+        | GPay / UPI / Google Pay | MSWIPE linked to order | GPayOrderMismatch (medium)   |
+        | Cash                | Cash Register on run_date | CashOrderNoRegister (medium) |
+        | Paytm / Online /    | Notepad payment for order | PaymentNotConfirmedByNotepad  |
+        | Package / Card      |                           | (low)                        |
+        +---------------------+---------------------------+------------------------------+
+        """
+        count = 0
+        gpay_modes = {'GPay', 'Google Pay', 'UPI'}
+        cash_modes = {'Cash'}
+        notepad_confirm_modes = {'Paytm', 'Online', 'Package', 'Card'}
+
+        crm_payments_today = [
+            p for p in order.payments
+            if p.source == 'crm' and p.payment_date == run_date
+        ]
+        if not crm_payments_today:
+            return 0
+
+        for payment in crm_payments_today:
+            mode = payment.payment_mode or ''
+
+            if mode in gpay_modes:
+                # Check MSWIPE linked to this order
+                mswipe_linked = any(
+                    p for p in order.payments
+                    if p.source == 'mswipe'
+                )
+                if not mswipe_linked:
+                    self._create_exception(
+                        run_id, order.id, 'medium', 'GPayOrderMismatch',
+                        tags=['MissingMSWIPE', 'CrossSourceMismatch'],
+                        evidence={
+                            'crm_amount': round(float(payment.amount), 2),
+                            'crm_date': str(run_date),
+                            'payment_mode': mode,
+                            'missing_source': 'MSWIPE',
+                        },
+                        action='Verify MSWIPE terminal for this GPay transaction'
+                    )
+                    count += 1
+
+            elif mode in cash_modes:
+                # Check cash register exists for run_date
+                from src.models.cash_register import CashRegisterEntry
+                register_exists = self.db.query(CashRegisterEntry).filter(
+                    CashRegisterEntry.entry_date == run_date
+                ).first()
+                if not register_exists:
+                    self._create_exception(
+                        run_id, order.id, 'medium', 'CashOrderNoRegister',
+                        tags=['MissingCashRegister', 'CrossSourceMismatch'],
+                        evidence={
+                            'crm_amount': round(float(payment.amount), 2),
+                            'crm_date': str(run_date),
+                            'payment_mode': mode,
+                            'missing_source': 'CashRegister',
+                        },
+                        action='Check cash register entry for this date'
+                    )
+                    count += 1
+
+            elif mode in notepad_confirm_modes:
+                # Check notepad has a payment for this order
+                notepad_confirmed = any(
+                    p for p in order.payments
+                    if p.source == 'notepad' and float(p.amount) > 0
+                )
+                if not notepad_confirmed:
+                    self._create_exception(
+                        run_id, order.id, 'low', 'PaymentNotConfirmedByNotepad',
+                        tags=['MissingNotepadConfirmation', 'CrossSourceMismatch'],
+                        evidence={
+                            'crm_amount': round(float(payment.amount), 2),
+                            'crm_date': str(run_date),
+                            'payment_mode': mode,
+                            'missing_source': 'Notepad',
+                        },
+                        action='Confirm delivery runner collected this payment'
+                    )
+                    count += 1
+
+        return count
+
+    # ── Feature 2: Ageing Orders ──────────────────────────────
+
+    def _check_ageing_orders(self, run_date: date, run_id: int) -> int:
+        """
+        Detect orders that are aged (past threshold) with no delivery from any source.
+
+        An order is considered ageing when:
+        - order_date <= run_date - ageing_threshold_days
+        - No DeliveryEvent exists from any source (crm or notepad)
+        - Outstanding balance > credit_tolerance
+
+        All ageing exceptions are severity=high (Sev 1).
+        """
+        threshold = self.settings.ageing_threshold
+        cutoff = run_date - timedelta(days=threshold)
+
+        # Query orders placed on or before cutoff
+        old_orders = self.db.query(Order).filter(
+            Order.order_date <= cutoff
+        ).all()
+
+        count = 0
+        for order in old_orders:
+            # Skip if any delivery exists (from any source)
+            if order.deliveries:
+                continue
+
+            balance = float(order.order_amount) - sum(float(p.amount) for p in order.payments)
+            if balance <= self.credit_tolerance:
+                continue  # Fully paid — not a concern
+
+            # Avoid duplicate ageing exceptions in same run
+            from src.models.exceptions import OrderException
+            already_flagged = self.db.query(OrderException).filter_by(
+                reconciliation_run_id=run_id,
+                order_id=order.id,
+                exception_type='AgeingOrder'
+            ).first()
+            if already_flagged:
+                continue
+
+            days_old = (run_date - order.order_date).days
+            self._create_exception(
+                run_id, order.id, 'high', 'AgeingOrder',
+                tags=['NoDelivery', 'AgeingUnpaid'],
+                evidence={
+                    'order_date': str(order.order_date),
+                    'run_date': str(run_date),
+                    'days_since_order': days_old,
+                    'threshold_days': threshold,
+                    'order_amount': round(float(order.order_amount), 2),
+                    'balance': round(balance, 2),
+                },
+                action=f'Order {days_old} days old with no delivery recorded. '
+                                f'Investigate status with delivery team.'
+            )
+            count += 1
+            logger.info(
+                "AgeingOrder: %s (%d days old, ₹%.2f outstanding)",
+                order.order_number, days_old, balance
+            )
+
+        return count
+
+    # ── Feature 4: Backdated Payment Detection ────────────────
+
+    def _check_backdated_payments(self, run_date: date, run_id: int) -> int:
+        """
+        Detect payments that appear to have been recorded on the wrong date.
+
+        Two scenarios:
+        1. GPay: CRM GPay on run_date with no same-day MSWIPE →
+           search MSWIPE within lookback_days for matching amount.
+           If found → BackdatedGPayPayment.
+
+        2. Cash: Cash deficit on run_date (notepad total > register total) →
+           search historical dates within lookback for surplus of same magnitude.
+           If found → SuspectedBackdatedCashPayment.
+        """
+        lookback = self.settings.backdated_lookback
+        lookback_start = run_date - timedelta(days=lookback)
+        count = 0
+
+        # ── GPay backdated check ──────────────────────────────
+        # Find CRM GPay payments on run_date that have no same-day MSWIPE match
+        gpay_modes = ['GPay', 'Google Pay', 'UPI']
+        crm_gpay_today = self.db.query(PaymentEvent).filter(
+            PaymentEvent.source == 'crm',
+            PaymentEvent.payment_mode.in_(gpay_modes),
+            PaymentEvent.payment_date == run_date,
+            PaymentEvent.order_id != None,
+        ).all()
+
+        for crm_pay in crm_gpay_today:
+            # Check if same-day MSWIPE exists for this order
+            same_day_mswipe = self.db.query(PaymentEvent).filter(
+                PaymentEvent.source == 'mswipe',
+                PaymentEvent.order_id == crm_pay.order_id,
+                PaymentEvent.payment_date == run_date,
+            ).first()
+            if same_day_mswipe:
+                continue  # Same-day confirmation exists — fine
+
+            # Also skip if GPayOrderMismatch was already raised for this order/run
+            # (backdated is a more specific sub-case of the mismatch)
+
+            # Search MSWIPE within lookback for amount match
+            tolerance = self.amount_tolerance
+            amount = float(crm_pay.amount)
+            historical_mswipe = self.db.query(PaymentEvent).filter(
+                PaymentEvent.source == 'mswipe',
+                PaymentEvent.payment_date >= lookback_start,
+                PaymentEvent.payment_date < run_date,
+                PaymentEvent.amount >= amount - tolerance,
+                PaymentEvent.amount <= amount + tolerance,
+            ).order_by(PaymentEvent.payment_date.desc()).first()
+
+            if historical_mswipe:
+                days_offset = (run_date - historical_mswipe.payment_date).days
+                self._create_exception(
+                    run_id, crm_pay.order_id, 'medium', 'BackdatedGPayPayment',
+                    tags=['BackdatedPayment', 'MSWIPEMismatch'],
+                    evidence={
+                        'crm_amount': round(amount, 2),
+                        'crm_recorded_date': str(run_date),
+                        'mswipe_actual_date': str(historical_mswipe.payment_date),
+                        'days_offset': days_offset,
+                        'mswipe_payment_id': historical_mswipe.id,
+                    },
+                    action=f'Payment of ₹{amount:.0f} likely received on '
+                                    f'{historical_mswipe.payment_date} (per MSWIPE) '
+                                    f'but CRM shows {run_date}. Correct CRM date.'
+                )
+                count += 1
+                logger.info(
+                    "BackdatedGPayPayment: order_id=%s, ₹%.2f — MSWIPE date %s vs CRM date %s",
+                    crm_pay.order_id, amount,
+                    historical_mswipe.payment_date, run_date
+                )
+
+        # ── Cash backdated (surplus/deficit correlation) ───────
+        cash_from = self.settings.cash_register_available_from
+        if cash_from and run_date < cash_from:
+            return count
+
+        # Cash expected (notepad) vs actual (register) on run_date
+        notepad_cash = float(
+            self.db.query(func.sum(PaymentEvent.amount)).filter(
+                PaymentEvent.source == 'notepad',
+                PaymentEvent.payment_mode == 'Cash',
+                PaymentEvent.payment_date == run_date,
+            ).scalar() or 0.0
+        )
+        from src.models.cash_register import CashRegisterEntry
+        register_today = self.db.query(CashRegisterEntry).filter(
+            CashRegisterEntry.entry_date == run_date
+        ).first()
+
+        if register_today and notepad_cash > 0:
+            derived = float(register_today.derived_cash_from_orders or 0.0)
+            deficit = notepad_cash - derived  # positive = deficit (notepad > register)
+
+            if deficit > self.cash_variance_tolerance:
+                # Search history for a matching surplus
+                historical_entries = self.db.query(CashRegisterEntry).filter(
+                    CashRegisterEntry.entry_date >= lookback_start,
+                    CashRegisterEntry.entry_date < run_date,
+                ).all()
+
+                for hist in historical_entries:
+                    hist_notepad_cash = float(
+                        self.db.query(func.sum(PaymentEvent.amount)).filter(
+                            PaymentEvent.source == 'notepad',
+                            PaymentEvent.payment_mode == 'Cash',
+                            PaymentEvent.payment_date == hist.entry_date,
+                        ).scalar() or 0.0
+                    )
+                    hist_derived = float(hist.derived_cash_from_orders or 0.0)
+                    surplus = hist_derived - hist_notepad_cash  # positive = surplus
+
+                    if abs(surplus - deficit) <= self.cash_variance_tolerance:
+                        days_offset = (run_date - hist.entry_date).days
+                        self._create_exception(
+                            run_id, None, 'medium', 'SuspectedBackdatedCashPayment',
+                            tags=['BackdatedPayment', 'CashCorrelation'],
+                            evidence={
+                                'deficit_date': str(run_date),
+                                'deficit_amount': round(deficit, 2),
+                                'surplus_date': str(hist.entry_date),
+                                'surplus_amount': round(surplus, 2),
+                                'days_offset': days_offset,
+                            },
+                            action=f'Cash deficit of ₹{deficit:.0f} on {run_date} may '
+                                            f'correlate with cash surplus of ₹{surplus:.0f} on '
+                                            f'{hist.entry_date} ({days_offset} days earlier). '
+                                            f'Investigate if a payment was collected but recorded late.'
+                        )
+                        count += 1
+                        logger.info(
+                            "SuspectedBackdatedCashPayment: deficit ₹%.2f on %s, "
+                            "surplus ₹%.2f on %s",
+                            deficit, run_date, surplus, hist.entry_date
+                        )
+                        break  # Only flag best correlation candidate
+
+        return count
+
+    # ── Feature 5: Period Summary ─────────────────────────────
+
+    def get_period_summary(self, start_date: date, end_date: date) -> Dict[str, Any]:
+        """
+        Aggregate daily reconciliation data into a period summary.
+
+        Used for monthly/quarterly views. Flattens temporal corrections:
+        if a GPay surplus on day A and deficit on day B cancel out within
+        the period, the net variance is 0 and those exceptions are marked
+        'self-correcting'.
+
+        Returns a dict with:
+          net_gpay_variance       — Σ CRM GPay − Σ MSWIPE for period
+          net_cash_variance       — Σ notepad cash − Σ register cash for period
+          self_correcting_pairs   — count of surplus/deficit pairs that net to 0
+          persistent_exceptions   — list of exceptions not cancelled by period netting
+          period_order_stats      — total orders, exceptions, ageing, backdated
+          per_day                 — per-day breakdown list
+        """
+        from src.models.reconciliation import ReconciliationRun
+        from src.models.exceptions import OrderException as OEx
+        from src.models.cash_register import CashRegisterEntry
+
+        # ── Collect aggregate totals ──────────────────────────
+        gpay_modes = ['GPay', 'Google Pay', 'UPI']
+        crm_gpay_total = float(
+            self.db.query(func.sum(PaymentEvent.amount)).filter(
+                PaymentEvent.source == 'crm',
+                PaymentEvent.payment_mode.in_(gpay_modes),
+                PaymentEvent.payment_date >= start_date,
+                PaymentEvent.payment_date <= end_date,
+            ).scalar() or 0.0
+        )
+        mswipe_total = float(
+            self.db.query(func.sum(PaymentEvent.amount)).filter(
+                PaymentEvent.source == 'mswipe',
+                PaymentEvent.payment_date >= start_date,
+                PaymentEvent.payment_date <= end_date,
+            ).scalar() or 0.0
+        )
+        notepad_cash_total = float(
+            self.db.query(func.sum(PaymentEvent.amount)).filter(
+                PaymentEvent.source == 'notepad',
+                PaymentEvent.payment_mode == 'Cash',
+                PaymentEvent.payment_date >= start_date,
+                PaymentEvent.payment_date <= end_date,
+            ).scalar() or 0.0
+        )
+        register_cash_total = float(
+            self.db.query(
+                func.sum(CashRegisterEntry.derived_cash_from_orders)
+            ).filter(
+                CashRegisterEntry.entry_date >= start_date,
+                CashRegisterEntry.entry_date <= end_date,
+            ).scalar() or 0.0
+        )
+
+        net_gpay_variance = round(crm_gpay_total - mswipe_total, 2)
+        net_cash_variance = round(notepad_cash_total - register_cash_total, 2)
+
+        # ── Gather all exceptions for the period ──────────────
+        runs = self.db.query(ReconciliationRun).filter(
+            ReconciliationRun.run_date >= start_date,
+            ReconciliationRun.run_date <= end_date,
+        ).all()
+        run_ids = [r.id for r in runs]
+
+        all_exceptions = self.db.query(OEx).filter(
+            OEx.reconciliation_run_id.in_(run_ids)
+        ).all() if run_ids else []
+
+        # ── Self-correcting pair detection ────────────────────
+        # Day-level GPayMismatch and CashVariance exceptions that cancel out
+        # when summed across the period are marked self-correcting.
+        gpay_mismatches = [e for e in all_exceptions if e.exception_type == 'GPayMismatch']
+        cash_variances = [e for e in all_exceptions if e.exception_type == 'CashVariance']
+
+        self_correcting_pairs = 0
+        if abs(net_gpay_variance) <= self.gpay_tolerance and gpay_mismatches:
+            self_correcting_pairs += len(gpay_mismatches)
+        if abs(net_cash_variance) <= self.cash_variance_tolerance and cash_variances:
+            self_correcting_pairs += len(cash_variances)
+
+        # ── Persistent exceptions ─────────────────────────────
+        # Non-day-level exceptions always persist (order-level issues don't cancel out)
+        transient_types = {'GPayMismatch', 'CashVariance'}
+        persistent = [e for e in all_exceptions if e.exception_type not in transient_types
+                      or e.resolution_status == 'open']
+
+        # If day-level variance persists at period level, keep those too
+        if abs(net_gpay_variance) > self.gpay_tolerance:
+            persistent = all_exceptions  # Include everything
+        else:
+            persistent = [e for e in all_exceptions if e.exception_type not in transient_types]
+
+        # ── Per-day breakdown ─────────────────────────────────
+        run_date_map = {r.id: r.run_date for r in runs}
+        per_day = []
+        for r in sorted(runs, key=lambda x: x.run_date):
+            day_ex = [e for e in all_exceptions if e.reconciliation_run_id == r.id]
+            per_day.append({
+                'date': str(r.run_date),
+                'run_id': r.id,
+                'total_exceptions': len(day_ex),
+                'high': sum(1 for e in day_ex if e.severity == 'high'),
+                'medium': sum(1 for e in day_ex if e.severity == 'medium'),
+                'status': r.status,
+            })
+
+        # ── Order stats for period ────────────────────────────
+        order_ids = set()
+        deliveries = self.db.query(DeliveryEvent).filter(
+            DeliveryEvent.delivery_date >= start_date,
+            DeliveryEvent.delivery_date <= end_date,
+        ).all()
+        payments = self.db.query(PaymentEvent).filter(
+            PaymentEvent.payment_date >= start_date,
+            PaymentEvent.payment_date <= end_date,
+        ).all()
+        for d in deliveries:
+            if d.order_id:
+                order_ids.add(d.order_id)
+        for p in payments:
+            if p.order_id:
+                order_ids.add(p.order_id)
+
+        summary = {
+            'start_date': str(start_date),
+            'end_date': str(end_date),
+            'days_in_period': (end_date - start_date).days + 1,
+            'runs_completed': len(runs),
+            # GPay
+            'crm_gpay_total': round(crm_gpay_total, 2),
+            'mswipe_total': round(mswipe_total, 2),
+            'net_gpay_variance': net_gpay_variance,
+            # Cash
+            'notepad_cash_total': round(notepad_cash_total, 2),
+            'register_cash_total': round(register_cash_total, 2),
+            'net_cash_variance': net_cash_variance,
+            # Exception stats
+            'total_exceptions': len(all_exceptions),
+            'persistent_exceptions_count': len(persistent),
+            'self_correcting_pairs': self_correcting_pairs,
+            'ageing_order_count': sum(1 for e in all_exceptions if e.exception_type == 'AgeingOrder'),
+            'backdated_count': sum(1 for e in all_exceptions
+                                   if e.exception_type in ('BackdatedGPayPayment',
+                                                           'SuspectedBackdatedCashPayment')),
+            # Order stats
+            'active_orders': len(order_ids),
+            # Detail
+            'persistent_exceptions': [
+                {
+                    'id': e.id,
+                    'order_id': e.order_id,
+                    'type': e.exception_type,
+                    'severity': e.severity,
+                    'run_date': str(run_date_map.get(e.reconciliation_run_id, '')),
+                    'evidence': e.evidence,
+                    'action': e.suggested_action,
+                }
+                for e in persistent
+            ],
+            'per_day': per_day,
+        }
+
+        logger.info(
+            "Period summary %s to %s: GPay net=₹%.2f, Cash net=₹%.2f, "
+            "%d persistent exceptions, %d self-correcting",
+            start_date, end_date, net_gpay_variance, net_cash_variance,
+            len(persistent), self_correcting_pairs
+        )
+        return summary
 
     # ── Day-Level Rules ───────────────────────────────────────
 
@@ -437,6 +990,11 @@ class ReconciliationService:
 
         Uses configurable cash_variance_tolerance for the threshold.
         """
+        # Skip cash checks before cash register data was available
+        cash_from = self.settings.cash_register_available_from
+        if cash_from and run_date < cash_from:
+            return 0
+
         expected_cash = self.db.query(func.sum(DeliveryEvent.amount_collected)).filter(
             DeliveryEvent.source == 'notepad',
             DeliveryEvent.payment_mode == 'Cash',
@@ -479,3 +1037,4 @@ class ReconciliationService:
             suggested_action=action
         )
         self.db.add(ex)
+

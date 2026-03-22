@@ -21,6 +21,7 @@ class ExcelExporter:
     Sheets (per PRD §4.2):
     1. Reconciled_Orders  2. Exceptions  3. Unmatched_Notepad
     4. Unmatched_MSWIPE   5. Daily_Summary  6. Audit_Log
+    7. Ageing_Orders
     """
     def __init__(self, db_session: Session):
         self.db = db_session
@@ -38,6 +39,7 @@ class ExcelExporter:
                 self._write_unmatched_mswipe(writer)
                 self._write_daily_summary(writer, run)
                 self._write_audit_log(writer, run)
+                self._write_ageing_orders(writer, run)
             logger.info("Report exported to %s for run %d", output_path, run_id)
         except ExportError:
             raise
@@ -126,3 +128,24 @@ class ExcelExporter:
             pd.DataFrame(data).to_excel(writer, sheet_name=name, index=False)
         else:
             pd.DataFrame({'Message': [empty_msg]}).to_excel(writer, sheet_name=name, index=False)
+
+    def _write_ageing_orders(self, writer, run):
+        """Sheet 7: Ageing orders with no delivery from any source."""
+        ageing_excs = self.db.query(OrderException).filter_by(
+            reconciliation_run_id=run.id,
+            exception_type='AgeingOrder'
+        ).all()
+        data = []
+        for ex in ageing_excs:
+            ev = ex.evidence or {}
+            data.append({
+                'Order Number': ex.order.order_number if ex.order else '—',
+                'Customer': ex.order.customer_name if ex.order else '—',
+                'Order Date': ev.get('order_date', ''),
+                'Days Since Order': ev.get('days_since_order', ''),
+                'Order Amount': ev.get('order_amount', 0),
+                'Balance Due': ev.get('balance', 0),
+                'Severity': ex.severity,
+                'Action': ex.suggested_action or '',
+            })
+        self._write_sheet(writer, 'Ageing_Orders', data, 'No ageing orders')

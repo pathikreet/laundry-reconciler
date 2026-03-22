@@ -11,7 +11,8 @@ Settings are loaded in this priority order:
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
-from typing import Dict
+from typing import Dict, Optional
+from datetime import date as date_type
 
 
 class Settings(BaseSettings):
@@ -39,6 +40,15 @@ class Settings(BaseSettings):
     cash_variance_tolerance_percent: float = Field(1.0, description="Cash variance tolerance Percent")
     credit_tolerance_inr: float = Field(1.0, description="Credit tolerance INR")
     late_payment_threshold_days: int = Field(0, description="Days after delivery before flagging as late payment")
+    ageing_order_threshold_days: int = Field(10, description="Days since order date before flagging as ageing (no delivery)")
+    payment_lookback_days: int = Field(100, description="How far back (days) to search for backdated GPay/cash payments")
+
+    # Data Source Availability Dates
+    # Skip notepad-dependent checks (delivery status, credit policy, notepad amount mismatch)
+    # for dates before notepad data was available.
+    notepad_start_date: Optional[date_type] = Field(None, description="Earliest date with notepad data; delivery/credit checks skipped before this date")
+    # Skip cash variance checks for dates before cash register data was available.
+    cash_register_start_date: Optional[date_type] = Field(None, description="Earliest date with cash register data; cash variance checks skipped before this date")
 
     # Payment Mode Mapping (PRD 2.1)
     # Note: In runner notepad, staff mark both GPay and Paytm as "Online".
@@ -93,6 +103,22 @@ class Settings(BaseSettings):
     @property
     def confidence_review_threshold(self) -> float:
         return 0.60
+
+    @property
+    def notepad_available_from(self) -> Optional[date_type]:
+        return self.notepad_start_date
+
+    @property
+    def cash_register_available_from(self) -> Optional[date_type]:
+        return self.cash_register_start_date
+
+    @property
+    def ageing_threshold(self) -> int:
+        return self.ageing_order_threshold_days
+
+    @property
+    def backdated_lookback(self) -> int:
+        return self.payment_lookback_days
 
 
 settings = Settings()
