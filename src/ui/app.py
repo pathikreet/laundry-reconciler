@@ -1118,7 +1118,9 @@ def page_results(session_db):
             date_label = f"{start_dt.strftime('%b %d, %Y')} - {end_dt.strftime('%b %d, %Y')}"
 
         if not selected_runs:
-            st.warning(f"No reconciliation runs found between {start_dt} and {end_dt}.")
+            st.info(f"No reconciliation runs found between {start_dt} and {end_dt}.")
+            st.button("▶️ Go to Run Reconciliation", type="primary", key="nav_to_recon_date_range",
+                      on_click=navigate_to, args=("Run Reconciliation",))
             return
 
         st.info(f"📊 Showing results for **{len(selected_runs)} days** from {date_label}")
