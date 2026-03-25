@@ -603,10 +603,8 @@ def page_import(session_db):
 
     if done == total and total > 0:
         st.success("🎉 All imports complete!")
-        def _nav_to_recon():
-            st.session_state['nav_radio'] = "Run Reconciliation"
         
-        st.button("▶️ Go to Run Reconciliation", type="primary", key="nav_to_recon", on_click=_nav_to_recon)
+        st.button("▶️ Go to Run Reconciliation", type="primary", key="nav_to_recon", on_click=navigate_to, args=("Run Reconciliation",))
 
     # Reset button
     col1, col2 = st.columns([4, 1])
@@ -787,9 +785,8 @@ def page_reconciliation(session_db):
                 st.session_state['range_results'] = totals
                 st.session_state['range_dates'] = (str(start_date), str(end_date))
 
-                if st.button("📊 View Results", type="primary", key="nav_to_results_range"):
-                    st.session_state['nav_radio'] = "View Results"
-                    st.rerun()
+                st.button("📊 View Results", type="primary", key="nav_to_results_range",
+                          on_click=navigate_to, args=("View Results",))
 
 
 # ── Period Summary (Monthly / Quarterly) ─────────────────
@@ -1118,7 +1115,9 @@ def page_results(session_db):
             date_label = f"{start_dt.strftime('%b %d, %Y')} - {end_dt.strftime('%b %d, %Y')}"
 
         if not selected_runs:
-            st.warning(f"No reconciliation runs found between {start_dt} and {end_dt}.")
+            st.info(f"No reconciliation runs found between {start_dt} and {end_dt}.")
+            st.button("▶️ Go to Run Reconciliation", type="primary", key="nav_to_recon_empty_range",
+                      on_click=navigate_to, args=("Run Reconciliation",))
             return
 
         st.info(f"📊 Showing results for **{len(selected_runs)} days** from {date_label}")

@@ -1,78 +1,47 @@
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import Page, expect, sync_playwright
+import time
+import re
 
-def run():
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
-        context = browser.new_context(record_video_dir="verification/videos/")
-        page = context.new_page()
-        page.goto("http://localhost:8501")
+def verify_feature(page: Page):
+    page.goto("http://localhost:8501")
+    page.wait_for_timeout(2000)
 
-        # Wait for the app to load
-        page.wait_for_selector("text=Import Wizard")
-        print("Checking Import Data page...")
-        page.screenshot(path="verification/import_page.png")
+    # Click on Run Reconciliation
+    page.locator('label').filter(has_text='Run Reconciliation').click()
+    page.wait_for_timeout(2000)
 
-        print("Navigating to Run Reconciliation...")
-        # Streamlit sidebar radio buttons: target the associated label via text
-        page.locator('label').filter(has_text='Run Reconciliation').click()
+    # Switch to Date Range
+    page.locator('label').filter(has_text='Date Range').click()
+    page.wait_for_timeout(1000)
 
-        try:
-            page.wait_for_selector("text=Reconciliation Engine", timeout=5000)
-            print("Successfully navigated to Reconciliation Engine.")
-        except:
-            print("Failed to navigate. Taking debug screenshot.")
-            page.screenshot(path="verification/debug_nav_fail.png")
-            context.close()
-            browser.close()
-            return
+    # Click Start Range Reconciliation
+    page.locator('button', has_text='Start Range Reconciliation').click()
+    page.wait_for_timeout(5000)
 
-        page.wait_for_timeout(1000)
+    # Click View Results
+    page.locator('button', has_text='View Results').click()
+    page.wait_for_timeout(3000)
 
-        # Start Single Date Reconciliation
-        print("Looking for Start Reconciliation button...")
-        start_btn = page.locator("button").filter(has_text="▶️ Start Reconciliation")
+    # Switch to Date Range view mode
+    page.locator('label').filter(has_text='Date Range').click()
+    page.wait_for_timeout(2000)
 
-        if start_btn.is_visible():
-            print("Clicking Start Reconciliation button...")
-            start_btn.click()
+    # Wait for the "Showing results for" info message or "No reconciliation runs found" message
+    # And check for our new button if there are no runs
 
-            # Wait for status container
-            try:
-                page.wait_for_selector("text=Reconciling Data...", timeout=5000)
-                print("Status container found.")
-            except:
-                print("Status container not found immediately.")
+    # Verify we're on View Results page
+    expect(page.locator("h2").filter(has_text="Reconciliation Dashboard")).to_be_visible()
 
-            page.wait_for_timeout(2000)
-            page.screenshot(path="verification/reconciliation_process.png")
-        else:
-            print("Start Reconciliation button not found. Taking debug screenshot.")
-            page.screenshot(path="verification/debug_button_fail.png")
-
-        # Test Date Range mode
-        print("Switching to Date Range Mode...")
-        page.locator('label').filter(has_text='📆 Date Range').click()
-        page.wait_for_timeout(1000)
-
-        range_start_btn = page.locator("button").filter(has_text="▶️ Start Range Reconciliation")
-        if range_start_btn.is_visible():
-            print("Clicking Start Range Reconciliation button...")
-            range_start_btn.click()
-            try:
-                page.wait_for_selector("text=Reconciling Data Range...", timeout=5000)
-                print("Range status container found.")
-            except:
-                print("Range status container not found immediately.")
-
-            # Let it run for a bit
-            page.wait_for_timeout(3000)
-            page.screenshot(path="verification/range_reconciliation_process.png")
-        else:
-            print("Start Range Reconciliation button not found.")
-            page.screenshot(path="verification/debug_range_button_fail.png")
-
-        context.close()
-        browser.close()
+    page.screenshot(path="verification/verification.png")
+    page.wait_for_timeout(1000)
 
 if __name__ == "__main__":
-    run()
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(record_video_dir="verification/video")
+        page = context.new_page()
+        try:
+            verify_feature(page)
+        finally:
+            context.close()
+            browser.close()
