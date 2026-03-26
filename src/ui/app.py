@@ -220,14 +220,16 @@ def render_import_step(step_num, title, desc, key, importer_class, session_db,
         first_file = uploaded_files[0]
         with st.expander(f"📋 Preview first 5 rows ({first_file.name})", expanded=False):
             try:
+                first_file.seek(0)
                 if first_file.name.endswith('.csv'):
                     preview_df = pd.read_csv(first_file, nrows=5)
                 else:
                     preview_df = pd.read_excel(first_file, nrows=5)
                 st.dataframe(preview_df.astype(str), width='stretch')
-                first_file.seek(0)  # Reset for import
             except Exception:
                 st.warning("Could not preview file")
+            finally:
+                first_file.seek(0)  # Reset for import
 
         if st.button(f"🚀 Import {len(uploaded_files)} File(s) for {title}", key=f"btn_{key}"):
             with st.spinner(f"Importing {len(uploaded_files)} file(s) for {title}..."):
@@ -342,6 +344,7 @@ def render_notepad_step(session_db, is_unlocked):
 
             with st.expander(f"📋 Preview first 5 rows ({first_file.name})", expanded=False):
                 try:
+                    first_file.seek(0)
                     if first_file.name.endswith('.csv'):
                         preview = pd.read_csv(first_file, nrows=5)
                     else:
@@ -353,9 +356,10 @@ def render_notepad_step(session_db, is_unlocked):
 
                         preview = pd.read_excel(first_file, sheet_name=preview_sheet, nrows=5)
                     st.dataframe(preview.astype(str), width='stretch')
-                    first_file.seek(0)
                 except Exception:
                     st.warning("Could not preview file")
+                finally:
+                    first_file.seek(0)
 
             if st.button(f"🚀 Import {len(uploaded_files)} Notepad File(s)", key="btn_notepad_file"):
                 with st.spinner("Importing Notepad data..."):
@@ -551,12 +555,14 @@ def render_cash_register_step(session_db, is_unlocked):
 
         with st.expander(f"📋 Preview first 5 rows ({first_file.name})", expanded=False):
             try:
+                first_file.seek(0)
                 preview_sheet = selected_sheet if not isinstance(selected_sheet, list) else selected_sheet[0]
                 preview = pd.read_excel(first_file, sheet_name=preview_sheet, nrows=5)
                 st.dataframe(preview.astype(str), width='stretch')
-                first_file.seek(0)
             except Exception:
                 st.warning("Could not preview file")
+            finally:
+                first_file.seek(0)
 
         if st.button(f"🚀 Import {len(uploaded_files)} Cash Register File(s)", key="btn_cash_register"):
             with st.spinner(f"Importing {len(uploaded_files)} Cash Register data file(s)..."):
