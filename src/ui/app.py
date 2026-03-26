@@ -604,7 +604,7 @@ def page_import(session_db):
     if done == total and total > 0:
         st.success("🎉 All imports complete!")
         
-        st.button("▶️ Go to Run Reconciliation", type="primary", key="nav_to_recon", on_click=navigate_to, args=("Run Reconciliation",))
+        st.button("▶️ Start Reconciliation", type="primary", key="nav_to_recon", on_click=navigate_to, args=("Run Reconciliation",))
 
     # Reset button
     col1, col2 = st.columns([4, 1])
