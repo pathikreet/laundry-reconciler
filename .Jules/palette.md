@@ -13,3 +13,7 @@
 ## 2026-03-21 - Navigation Empty States and Streamlit Callbacks
 **Learning:** Empty states with "dead-end" warning messages create friction. Providing a direct Call-to-Action (CTA) button to the next logical step (e.g., navigating to a data generation page) significantly improves flow. However, in Streamlit, directly mutating a widget's session state (like a sidebar navigation radio) *after* it has been rendered causes a fatal `StreamlitAPIException`. Navigation must be handled via `on_click` callbacks attached to buttons, rather than inline state mutation followed by `st.rerun()`.
 **Action:** Replace dead-end warnings with `st.info` and a primary CTA button. Implement programmatic navigation using `on_click=navigate_to_callback` instead of setting `st.session_state` directly.
+
+## 2026-04-03 - Empty State Clarity
+**Learning:** Using `st.success` in data tables to display empty states (like "All notepad entries matched!") lacks clarity and looks like a system notification. A more descriptive `st.info` block explaining *why* the table is empty (e.g., "🎉 All entries successfully matched to orders. No action needed.") significantly reduces user anxiety when seeing a blank table.
+**Action:** When a list is intentionally empty due to a positive system state (like complete reconciliation), use `st.info` to explain that this is the desired outcome and explicitly state that "no action is needed".

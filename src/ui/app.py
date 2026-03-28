@@ -1580,7 +1580,7 @@ def page_results(session_db):
                 st.dataframe(pd.DataFrame(np_data), width='stretch', hide_index=True)
                 st.caption(f"{len(np_data)} unmatched entries")
             else:
-                st.success("All notepad entries matched!")
+                st.info("🎉 All notepad entries successfully matched to orders. No action needed.")
 
         with col_ms:
             st.subheader("💳 Unmatched MSWIPE")
@@ -1594,7 +1594,7 @@ def page_results(session_db):
                 st.dataframe(pd.DataFrame(ms_data), width='stretch', hide_index=True)
                 st.caption(f"{len(ms_data)} unmatched entries")
             else:
-                st.success("All MSWIPE entries matched!")
+                st.info("🎉 All MSWIPE entries successfully matched to orders. No action needed.")
 
     # ══════════════════════════════════════════════════════
     # TAB 8: Export
