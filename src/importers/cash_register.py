@@ -2,19 +2,30 @@ import pandas as pd
 from typing import List, Dict, Any, Optional
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
-from src.importers.base import BaseImporter
+from src.importers.base import BaseImporter, read_excel_auto
+import os
 from src.models.cash_register import CashRegisterEntry
 from src.models.reconciliation import ReconciliationRun
+import logging
+
+logger = logging.getLogger(__name__)
 
 class CashRegisterImporter(BaseImporter):
     def import_data(self, file_path: str, **kwargs) -> List[Dict[str, Any]]:
-        # kwargs should contain 'year' and potentially 'sheet_name'
-        year = kwargs.get('year', date.today().year)
-        sheet_name = kwargs.get('sheet_name', str(year))
+        # kwargs should contain 'year' and/or 'sheet_name'
+        explicit_year = kwargs.get('year')
+        sheet_name = kwargs.get('sheet_name', str(explicit_year or date.today().year))
+
+        # Derive year from sheet_name if it looks like a year (e.g. "2025")
+        if isinstance(sheet_name, str) and sheet_name.isdigit() and len(sheet_name) == 4:
+            year = int(sheet_name)
+        else:
+            year = explicit_year or date.today().year
 
         try:
             # Check if sheet exists, if not try to infer or use first
-            xl = pd.ExcelFile(file_path)
+            xls_engine = 'xlrd' if os.path.splitext(file_path)[1].lower() == '.xls' else None
+            xl = pd.ExcelFile(file_path, engine=xls_engine)
             if sheet_name not in xl.sheet_names:
                 # Fallback to first sheet if only one exists or year matches
                 if str(year) in xl.sheet_names:
@@ -22,7 +33,8 @@ class CashRegisterImporter(BaseImporter):
                 else:
                     sheet_name = xl.sheet_names[0]
 
-            df = pd.read_excel(file_path, sheet_name=sheet_name)
+            logger.info("Importing Cash Register: sheet='%s', year=%d", sheet_name, year)
+            df = read_excel_auto(file_path, sheet_name=sheet_name)
         except Exception as e:
             print(f"Error reading Excel file: {e}")
             return []

@@ -206,7 +206,7 @@ def render_import_step(step_num, title, desc, key, importer_class, session_db,
     if should_render is not True:
         return
 
-    file_types = file_types or ['csv', 'xlsx']
+    file_types = file_types or ['csv', 'xlsx', 'xls']
     uploaded_files = st.file_uploader(f"Upload {title} (Multiple allowed)", type=file_types, key=f"upload_{key}", accept_multiple_files=True)
 
     if uploaded_files:
@@ -306,7 +306,7 @@ def render_notepad_step(session_db, is_unlocked):
 
     # ── Tab 1: File Upload ──
     with tab_upload:
-        uploaded_files = st.file_uploader("Upload Notepad Excel/CSV (Multiple allowed)", type=['csv', 'xlsx'], key="upload_notepad", accept_multiple_files=True)
+        uploaded_files = st.file_uploader("Upload Notepad Excel/CSV (Multiple allowed)", type=['csv', 'xlsx', 'xls'], key="upload_notepad", accept_multiple_files=True)
         if uploaded_files:
             for uf in uploaded_files:
                 valid, msg = validate_upload(uf)
@@ -516,7 +516,7 @@ def render_cash_register_step(session_db, is_unlocked):
     if should_render is not True:
         return
 
-    uploaded_files = st.file_uploader("Upload Cash Register Excel (Multiple allowed)", type=['xlsx'], key="upload_cash_register", accept_multiple_files=True)
+    uploaded_files = st.file_uploader("Upload Cash Register Excel (Multiple allowed)", type=['xlsx', 'xls'], key="upload_cash_register", accept_multiple_files=True)
     if uploaded_files:
         for uf in uploaded_files:
             valid, msg = validate_upload(uf)
@@ -559,24 +559,32 @@ def render_cash_register_step(session_db, is_unlocked):
                 st.warning("Could not preview file")
 
         if st.button(f"🚀 Import {len(uploaded_files)} Cash Register File(s)", key="btn_cash_register"):
-            with st.spinner(f"Importing {len(uploaded_files)} Cash Register data file(s)..."):
+            with st.spinner(f"Importing Cash Register data..."):
                 importer = CashRegisterImporter(session_db)
                 total_res = {'total': 0, 'imported': 0, 'errors': 0}
                 all_ok = True
+
                 for uf in uploaded_files:
-                    ok, result = safe_import(importer, uf, sheet_name=selected_sheet)
-                    if ok and isinstance(result, dict):
-                        total_res['total'] += result.get('total', 0)
-                        total_res['imported'] += result.get('imported', 0)
-                        total_res['errors'] += result.get('errors', 0)
-                    else:
-                        st.error(f"❌ Import failed for {uf.name}: {result}")
-                        all_ok = False
+                    # If user selected multiple sheets, import each one separately
+                    sheets_to_import = selected_sheet if isinstance(selected_sheet, list) else [selected_sheet]
+                    for sheet in sheets_to_import:
+                        uf.seek(0)
+                        ok, result = safe_import(importer, uf, sheet_name=sheet)
+                        if ok and isinstance(result, dict):
+                            total_res['total'] += result.get('total', 0)
+                            total_res['imported'] += result.get('imported', 0)
+                            total_res['errors'] += result.get('errors', 0)
+                        else:
+                            st.error(f"❌ Import failed for {uf.name} (sheet: {sheet}): {result}")
+                            all_ok = False
+                            break
+                    if not all_ok:
                         break
 
                 if all_ok:
                     st.session_state.imports['cash_register'] = {'done': True, 'result': total_res}
-                    st.success(f"✅ All {len(uploaded_files)} Cash Register file(s) imported!")
+                    sheets_label = sheets_to_import if isinstance(selected_sheet, list) else [selected_sheet]
+                    st.success(f"✅ Cash Register imported! Sheets: {', '.join(str(s) for s in sheets_label)}")
                     if total_res['errors'] > 0:
                         st.warning(f"⚠️ {total_res['errors']} rows had issues and were skipped")
                     st.rerun()
@@ -888,6 +896,24 @@ def _render_period_summary(session_db, view_mode: str):
         else:
             st.error(f"⚠️ GPay net variance of ₹{net_g:,.0f} persists for the period.")
 
+        # Drill-down: GPay contributing exceptions
+        gpay_drill = [ex for ex in summary.get('persistent_exceptions', [])
+                      if ex.get('type') in ('GPayMismatch', 'GPayOrderMismatch', 'BackdatedGPayPayment')]
+        if gpay_drill:
+            with st.expander(f"🔍 View {len(gpay_drill)} contributing GPay exceptions", expanded=False):
+                gp_rows = []
+                for ex in gpay_drill:
+                    ev = ex.get('evidence', {})
+                    gp_rows.append({
+                        'Date': ex.get('run_date', '—'),
+                        'Type': ex.get('type', '—'),
+                        'CRM GPay': f"₹{ev.get('crm_gpay', ev.get('crm_amount', 0)):,.0f}",
+                        'MSWIPE': f"₹{ev.get('mswipe_gpay', ev.get('mswipe_amount', 0)):,.0f}",
+                        'Diff': f"₹{ev.get('diff', ev.get('days_offset', 0)):,.0f}",
+                        'Action': ex.get('action', '—'),
+                    })
+                st.dataframe(pd.DataFrame(gp_rows), width='stretch', hide_index=True)
+
     with col_cash:
         st.subheader("💵 Cash Net Variance")
         net_c = summary.get('net_cash_variance', 0)
@@ -900,6 +926,24 @@ def _render_period_summary(session_db, view_mode: str):
             st.success("✅ Cash balances within tolerance for this period.")
         else:
             st.error(f"⚠️ Cash net variance of ₹{net_c:,.0f} persists for the period.")
+
+        # Drill-down: Cash contributing exceptions
+        cash_drill = [ex for ex in summary.get('persistent_exceptions', [])
+                      if ex.get('type') in ('CashVariance', 'CashOrderNoRegister', 'SuspectedBackdatedCashPayment')]
+        if cash_drill:
+            with st.expander(f"🔍 View {len(cash_drill)} contributing Cash exceptions", expanded=False):
+                cr_rows = []
+                for ex in cash_drill:
+                    ev = ex.get('evidence', {})
+                    cr_rows.append({
+                        'Date': ex.get('run_date', '—'),
+                        'Type': ex.get('type', '—'),
+                        'Expected': f"₹{ev.get('expected', ev.get('crm_amount', 0)):,.0f}",
+                        'Actual': f"₹{ev.get('derived', 0):,.0f}",
+                        'Diff': f"₹{ev.get('diff', 0):,.0f}",
+                        'Action': ex.get('action', '—'),
+                    })
+                st.dataframe(pd.DataFrame(cr_rows), width='stretch', hide_index=True)
 
     st.divider()
 
@@ -927,141 +971,6 @@ def _render_period_summary(session_db, view_mode: str):
         with st.expander("📋 Per-Day Breakdown", expanded=False):
             st.dataframe(pd.DataFrame(per_day), width='stretch', hide_index=True)
 
-
-# ── Period Summary (Monthly / Quarterly) ─────────────────
-
-def _render_period_summary(session_db, view_mode: str):
-    """Render Monthly or Quarterly period aggregation view."""
-    from src.services.reconciliation import ReconciliationService
-    from calendar import monthrange
-    import datetime
-
-    st.subheader(f"{'📊 Monthly' if 'Monthly' in view_mode else '📊 Quarterly'} Period Summary")
-    st.caption(
-        "Aggregates daily reconciliation data over the period. "
-        "Day-level GPay/cash variances that cancel out within the period are shown as "
-        "self-correcting. Persistent exceptions remain open at the end of the period."
-    )
-
-    today = date.today()
-
-    if "Monthly" in view_mode:
-        col_m, col_y = st.columns(2)
-        month = col_m.selectbox("Month", list(range(1, 13)),
-                                index=today.month - 1,
-                                format_func=lambda m: date(2000, m, 1).strftime('%B'),
-                                key="period_month")
-        year  = col_y.number_input("Year", min_value=2020, max_value=today.year,
-                                   value=today.year, key="period_year")
-        _, last_day = monthrange(int(year), int(month))
-        start_date = date(int(year), int(month), 1)
-        end_date   = date(int(year), int(month), last_day)
-        period_label = start_date.strftime('%B %Y')
-    else:
-        qtr_options = ['Q1 (Jan–Mar)', 'Q2 (Apr–Jun)', 'Q3 (Jul–Sep)', 'Q4 (Oct–Dec)']
-        qtr_starts  = [(1,1), (4,1), (7,1), (10,1)]
-        qtr_ends    = [(3,31),(6,30),(9,30),(12,31)]
-        current_qtr = (today.month - 1) // 3
-        col_q, col_y = st.columns(2)
-        qtr_idx = col_q.selectbox("Quarter", list(range(4)), index=current_qtr,
-                                  format_func=lambda i: qtr_options[i],
-                                  key="period_qtr")
-        year = col_y.number_input("Year", min_value=2020, max_value=today.year,
-                                  value=today.year, key="period_year_q")
-        sm, sd = qtr_starts[qtr_idx]
-        em, ed = qtr_ends[qtr_idx]
-        start_date  = date(int(year), sm, sd)
-        end_date    = date(int(year), em, ed)
-        period_label = f"{qtr_options[qtr_idx]} {int(year)}"
-
-    if st.button(f"📊 Load {period_label} Summary", type="primary", key="load_period"):
-        with st.spinner(f"Computing period summary for {period_label}..."):
-            recon = ReconciliationService(session_db)
-            summary = recon.get_period_summary(start_date, end_date)
-            st.session_state['period_summary'] = summary
-            st.session_state['period_label']   = period_label
-
-    summary = st.session_state.get('period_summary')
-    if not summary:
-        st.info("Select a period and click Load to see the results.")
-        return
-
-    period_label = st.session_state.get('period_label', period_label)
-    st.success(f"Showing period: **{period_label}** "
-               f"({summary.get('runs_completed', 0)} days reconciled "
-               f"of {summary.get('days_in_period', 0)})")
-
-    st.divider()
-
-    # ── Top-level metrics ──────────────────────────────────
-    c1, c2, c3 = st.columns(3)
-    c1.metric("📋 Active Orders",  summary.get('active_orders', 0), help="Total distinct orders touched during this period")
-    c2.metric("⚠️ Total Exceptions", summary.get('total_exceptions', 0), help="Total exceptions generated before period netting")
-    c3.metric("⚠️ Persistent", summary.get('persistent_exceptions_count', 0), help="Exceptions that remain open and unresolved at the end of the period")
-    
-    st.write("")
-    
-    c4, c5, c6 = st.columns(3)
-    c4.metric("🔄 Self-Correcting", summary.get('self_correcting_pairs', 0),
-              help="Day-level cash/GPay variances that canceled each other out within this period")
-    c5.metric("⏰ Ageing", summary.get('ageing_order_count', 0), help="Orders older than the threshold missing a delivery confirmation")
-    c6.metric("🕵️ Backdated", summary.get('backdated_count', 0), help="Payments matched to historical discrepancies or delayed MSWIPE sweeps")
-
-    st.divider()
-
-    # ── Payment variance netting ───────────────────────────
-    col_gpay, col_cash = st.columns(2)
-    with col_gpay:
-        st.subheader("💳 GPay Net Variance")
-        net_g = summary.get('net_gpay_variance', 0)
-        st.metric("CRM GPay Total",  f"₹{summary.get('crm_gpay_total', 0):,.0f}")
-        st.metric("MSWIPE Total",    f"₹{summary.get('mswipe_total', 0):,.0f}")
-        color = "normal" if abs(net_g) <= 10 else "inverse"
-        st.metric("Net Variance", f"₹{net_g:,.0f}", delta=f"₹{net_g:,.0f}",
-                  delta_color=color)
-        if abs(net_g) <= 10:
-            st.success("✅ GPay balances within tolerance for this period.")
-        else:
-            st.error(f"⚠️ GPay net variance of ₹{net_g:,.0f} persists for the period.")
-
-    with col_cash:
-        st.subheader("💵 Cash Net Variance")
-        net_c = summary.get('net_cash_variance', 0)
-        st.metric("Notepad Cash Total",   f"₹{summary.get('notepad_cash_total', 0):,.0f}")
-        st.metric("Register Cash Total",  f"₹{summary.get('register_cash_total', 0):,.0f}")
-        color = "normal" if abs(net_c) <= 100 else "inverse"
-        st.metric("Net Variance", f"₹{net_c:,.0f}", delta=f"₹{net_c:,.0f}",
-                  delta_color=color)
-        if abs(net_c) <= 100:
-            st.success("✅ Cash balances within tolerance for this period.")
-        else:
-            st.error(f"⚠️ Cash net variance of ₹{net_c:,.0f} persists for the period.")
-
-    st.divider()
-
-    # ── Persistent exceptions table ────────────────────────
-    persistent = summary.get('persistent_exceptions', [])
-    if persistent:
-        st.subheader(f"⚠️ Persistent Exceptions ({len(persistent)})")
-        st.caption("These exceptions remain open even after period-level netting.")
-        p_rows = []
-        for ex in persistent:
-            p_rows.append({
-                'Date':     ex.get('run_date', '—'),
-                'Type':     ex.get('type', '—'),
-                'Severity': '🔴' if ex.get('severity') == 'high' else
-                            '🟡' if ex.get('severity') == 'medium' else '🟢',
-                'Action':   ex.get('action', '—'),
-            })
-        st.dataframe(pd.DataFrame(p_rows), width='stretch', hide_index=True)
-    else:
-        st.success("🎉 No persistent exceptions for this period!")
-
-    # ── Per-day breakdown ──────────────────────────────────
-    per_day = summary.get('per_day', [])
-    if per_day:
-        with st.expander("📋 Per-Day Breakdown", expanded=False):
-            st.dataframe(pd.DataFrame(per_day), width='stretch', hide_index=True)
 
 
 # ── Page: View Results ────────────────────────────────────
@@ -1185,15 +1094,10 @@ def page_results(session_db):
         high_ex = sum(1 for e in exceptions if e.severity == 'high')
         medium_ex = sum(1 for e in exceptions if e.severity == 'medium')
         low_ex = sum(1 for e in exceptions if e.severity in ('low', 'info'))
-        late_ex = sum(
-            (r.summary_stats or {}).get('late_payment_exceptions', 0) for r in selected_runs
-        )
-        ageing_ex = sum(
-            (r.summary_stats or {}).get('ageing_order_exceptions', 0) for r in selected_runs
-        )
-        backdated_ex = sum(
-            (r.summary_stats or {}).get('backdated_payment_exceptions', 0) for r in selected_runs
-        )
+        late_ex = sum(1 for e in exceptions if e.exception_type == 'LatePayment')
+        ageing_ex = sum(1 for e in exceptions if e.exception_type == 'AgeingOrder')
+        backdated_ex = sum(1 for e in exceptions if e.exception_type in (
+            'BackdatedGPayPayment', 'BackdatedCashPayment'))
         row1_cols = st.columns(4)
         row1_cols[0].metric("📅 Period", date_label, help=f"Reconciliation period: {date_label}")
         row1_cols[1].metric("✅ Runs", str(len(selected_runs)), help="Number of daily runs included in this view")

@@ -506,7 +506,7 @@ class ReconciliationService:
                             'payment_mode': mode,
                             'missing_source': 'MSWIPE',
                         },
-                        action='Verify MSWIPE terminal for this GPay transaction'
+                        action=f'No MSWIPE match for ₹{float(payment.amount):,.0f} GPay — check Unmatched MSWIPE tab or verify order number'
                     )
                     count += 1
 
@@ -1026,7 +1026,40 @@ class ReconciliationService:
     # ── Helpers ────────────────────────────────────────────────
 
     def _create_exception(self, run_id, order_id, severity, exc_type, tags, evidence, action):
-        """Create and persist a reconciliation exception."""
+        """Create and persist a reconciliation exception.
+        
+        Auto-carryover: if a previous exception of the same type for the same
+        order was already resolved or marked false_positive, the new exception
+        inherits that resolution status so it doesn't resurface on re-runs.
+        """
+        # Check for a prior resolution of the same issue
+        resolution_status = 'open'
+        resolution_note = None
+        resolved_at = None
+
+        if order_id is not None:
+            prior = self.db.query(OrderException).filter(
+                OrderException.order_id == order_id,
+                OrderException.exception_type == exc_type,
+                OrderException.resolution_status.in_(['resolved', 'false_positive']),
+            ).order_by(OrderException.id.desc()).first()
+        else:
+            # Day-level exceptions (order_id is None): match by type + evidence signature
+            prior = self.db.query(OrderException).filter(
+                OrderException.order_id == None,
+                OrderException.exception_type == exc_type,
+                OrderException.resolution_status.in_(['resolved', 'false_positive']),
+            ).order_by(OrderException.id.desc()).first()
+
+        if prior:
+            resolution_status = prior.resolution_status
+            resolution_note = f"[Auto-carried from #{prior.id}] {prior.resolution_note or ''}"
+            resolved_at = prior.resolved_at
+            logger.info(
+                "Auto-carrying resolution '%s' from exception #%d for %s/%s",
+                prior.resolution_status, prior.id, exc_type, order_id
+            )
+
         ex = OrderException(
             reconciliation_run_id=run_id,
             order_id=order_id,
@@ -1034,7 +1067,10 @@ class ReconciliationService:
             exception_type=exc_type,
             reason_tags=tags,
             evidence=evidence,
-            suggested_action=action
+            suggested_action=action,
+            resolution_status=resolution_status,
+            resolution_note=resolution_note,
+            resolved_at=resolved_at,
         )
         self.db.add(ex)
 

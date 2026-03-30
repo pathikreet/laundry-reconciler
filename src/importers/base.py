@@ -1,10 +1,41 @@
 import logging
+import os
+import pandas as pd
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
 from sqlalchemy.orm import Session
 from src.exceptions import ImportError as AppImportError
 
 logger = logging.getLogger(__name__)
+
+
+def read_excel_auto(file_path: str, **kwargs) -> pd.DataFrame:
+    """Read an Excel file, auto-detecting the engine based on extension.
+    
+    .xls files require engine='xlrd', .xlsx files use 'openpyxl' (default).
+    """
+    ext = os.path.splitext(file_path)[1].lower()
+    if ext == '.xls':
+        kwargs.setdefault('engine', 'xlrd')
+    return pd.read_excel(file_path, **kwargs)
+
+
+def sanitize_raw_data(data: dict) -> dict:
+    """Convert non-JSON-serializable values (datetime, date, Timestamp) to strings.
+    
+    Excel files often contain datetime objects in cells which cause
+    'Object of type datetime is not JSON serializable' when stored in JSON columns.
+    """
+    import datetime as dt
+    clean = {}
+    for k, v in data.items():
+        if isinstance(v, (dt.datetime, dt.date, pd.Timestamp)):
+            clean[k] = str(v)
+        elif isinstance(v, float) and pd.isna(v):
+            clean[k] = None
+        else:
+            clean[k] = v
+    return clean
 
 
 class BaseImporter(ABC):

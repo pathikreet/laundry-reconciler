@@ -11,7 +11,7 @@ import pandas as pd
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from dateutil.parser import parse
-from src.importers.base import BaseImporter
+from src.importers.base import BaseImporter, read_excel_auto, sanitize_raw_data
 from src.models.orders import Order
 
 logger = logging.getLogger(__name__)
@@ -23,9 +23,9 @@ class CRMOrdersImporter(BaseImporter):
         if file_path.endswith('.csv'):
             df = pd.read_csv(file_path)
         else:
-            df = pd.read_excel(file_path)
+            df = read_excel_auto(file_path)
         df = df.where(pd.notnull(df), None)
-        return df.to_dict(orient='records')
+        return [sanitize_raw_data(row) for row in df.to_dict(orient='records')]
 
     def normalize(self, raw_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         normalized = []

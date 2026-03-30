@@ -3,7 +3,7 @@ import pandas as pd
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from dateutil.parser import parse
-from src.importers.base import BaseImporter
+from src.importers.base import BaseImporter, read_excel_auto, sanitize_raw_data
 from src.models.payments import PaymentEvent
 
 logger = logging.getLogger(__name__)
@@ -13,9 +13,27 @@ class MSwipeImporter(BaseImporter):
         if file_path.endswith('.csv'):
             df = pd.read_csv(file_path)
         else:
-            df = pd.read_excel(file_path)
+            try:
+                df = read_excel_auto(file_path)
+            except Exception:
+                # MSWIPE often exports HTML tables disguised as .xls files.
+                # When xlrd/openpyxl fails, try reading as HTML.
+                logger.info("Standard Excel read failed, trying HTML table fallback for %s", file_path)
+                try:
+                    tables = pd.read_html(file_path)
+                    df = tables[0] if tables else pd.DataFrame()
+                    # pd.read_html may miss <thead> — if columns are numeric (0,1,2...),
+                    # the real header is in row 0
+                    first_col = df.columns[0]
+                    is_numeric_header = not isinstance(first_col, str) or first_col.isdigit()
+                    if not df.empty and is_numeric_header:
+                        df.columns = df.iloc[0]
+                        df = df.iloc[1:].reset_index(drop=True)
+                except Exception as e:
+                    logger.error("HTML fallback also failed for %s: %s", file_path, e)
+                    raise
         df = df.where(pd.notnull(df), None)
-        return df.to_dict(orient='records')
+        return [sanitize_raw_data(row) for row in df.to_dict(orient='records')]
 
     def normalize(self, raw_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         normalized_data = []
@@ -28,7 +46,7 @@ class MSwipeImporter(BaseImporter):
                 return None
 
             # Status check
-            status_keys = ['Status', 'Trx Status', 'Transaction Status']
+            status_keys = ['Status', 'Trx Status', 'Transaction Status', 'Txn Status']
             status_val = get_val(status_keys)
 
             # If status column exists, check it.
@@ -74,8 +92,9 @@ class MSwipeImporter(BaseImporter):
         # Get dates present in this import batch
         run_dates = set()
         for r in data:
-            if r.get('payment_date'):
-                run_dates.add(r['payment_date'])
+            d = r.get('payment_date')
+            if d:
+                run_dates.add(d)
 
         # Clear old MSWIPE events FOR THESE DATES so re-importing doesn't duplicate
         if run_dates:
@@ -102,9 +121,6 @@ class MSwipeImporter(BaseImporter):
                 if p.mswipe_ref_ids and row['ref_id'] and row['ref_id'] in p.mswipe_ref_ids:
                     is_duplicate = True
                     break
-                # If no ref_id in row, but exact amount/date/mode match?
-                # Without ref_id, duplicate amounts on same day are indistinguishable.
-                # Assuming unique transactions if ref_id is present.
 
             if not is_duplicate:
                 payment = PaymentEvent(
@@ -121,18 +137,66 @@ class MSwipeImporter(BaseImporter):
         self.db.commit()
 
     def _parse_date(self, date_str: Any) -> Optional[Any]:
+        """Parse MSWIPE date strings which come in two formats:
+        
+        1. MM/DD/YYYY HH:MM:SS  (slash-separated, US format)
+        2. YYYY-DD-MM HH:MM:SS  (dash-separated, day/month SWAPPED by Excel)
+        
+        Excel's cell protection can produce YYYY-DD-MM dates instead of
+        YYYY-MM-DD. We handle this with:
+          - If first value > 12: definitely a day, so swap (unambiguous)
+          - If both <= 12: try default parse; if result is in the future,
+            try swapping — if swap gives a past date, use that instead.
+        """
         if date_str is None or pd.isna(date_str) or str(date_str).strip() == '':
             return None
         try:
-            return parse(str(date_str)).date()
-        except:
+            s = str(date_str).strip()
+            from datetime import date as date_cls
+            today = date_cls.today()
+            
+            # Format 1: MM/DD/YYYY — handle with dayfirst=False
+            if '/' in s:
+                return parse(s, dayfirst=False).date()
+            
+            # Format 2: YYYY-A-B (dash-separated ISO-like)
+            date_part = s.split(' ')[0] if ' ' in s else s
+            parts = date_part.split('-')
+            if len(parts) == 3:
+                year_s, a_s, b_s = parts
+                year, a, b = int(year_s), int(a_s), int(b_s)
+                
+                # Unambiguous: a > 12 means a is definitely a day
+                if a > 12 and 1 <= b <= 12:
+                    try:
+                        return date_cls(year, b, a)
+                    except ValueError:
+                        pass
+                
+                # Ambiguous: both <= 12 — default to YYYY-MM-DD,
+                # but if result is in the future, try YYYY-DD-MM
+                if a <= 12 and b <= 12 and a != b:
+                    default_date = date_cls(year, a, b)  # YYYY-MM-DD
+                    if default_date > today:
+                        # Try swapping: YYYY-DD-MM
+                        try:
+                            swapped = date_cls(year, b, a)
+                            if swapped <= today:
+                                return swapped
+                        except ValueError:
+                            pass
+                    return default_date
+            
+            # Default parse for any other format
+            return parse(s, dayfirst=False).date()
+        except Exception:
             return None
 
     def _parse_amount(self, amount: Any) -> float:
         if amount is None or pd.isna(amount) or str(amount).strip() == '':
             return 0.0
         try:
-            return float(str(amount).replace(',', '').replace('₹', '').strip())
+            return float(str(amount).replace(',', '').replace('\u20b9', '').strip())
         except:
             return 0.0
 

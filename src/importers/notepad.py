@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional
 from datetime import date as date_type
 from sqlalchemy.orm import Session
 from dateutil.parser import parse
-from src.importers.base import BaseImporter
+from src.importers.base import BaseImporter, read_excel_auto
 from src.models.deliveries import DeliveryEvent
 from src.models.payments import PaymentEvent
 from src.models.orders import Order
@@ -26,14 +26,14 @@ class NotepadImporter(BaseImporter):
             if sheet_name == '__all__' or isinstance(sheet_name, list):
                 # Read specified sheets (or all) and combine
                 read_arg = None if sheet_name == '__all__' else sheet_name
-                all_sheets = pd.read_excel(file_path, sheet_name=read_arg)
+                all_sheets = read_excel_auto(file_path, sheet_name=read_arg)
                 frames = []
                 for name, sheet_df in all_sheets.items():
                     sheet_df['_sheet_name'] = name  # Track which sheet each row came from
                     frames.append(sheet_df)
                 df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
             else:
-                df = pd.read_excel(file_path, sheet_name=sheet_name)
+                df = read_excel_auto(file_path, sheet_name=sheet_name)
         
         # Look for headerless files where pandas ingested the first data row as the header
         # Delivery notes files often lack headers. We check if the first column name looks like an Order Number
