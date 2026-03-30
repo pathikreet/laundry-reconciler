@@ -13,3 +13,7 @@
 ## 2026-03-21 - Navigation Empty States and Streamlit Callbacks
 **Learning:** Empty states with "dead-end" warning messages create friction. Providing a direct Call-to-Action (CTA) button to the next logical step (e.g., navigating to a data generation page) significantly improves flow. However, in Streamlit, directly mutating a widget's session state (like a sidebar navigation radio) *after* it has been rendered causes a fatal `StreamlitAPIException`. Navigation must be handled via `on_click` callbacks attached to buttons, rather than inline state mutation followed by `st.rerun()`.
 **Action:** Replace dead-end warnings with `st.info` and a primary CTA button. Implement programmatic navigation using `on_click=navigate_to_callback` instead of setting `st.session_state` directly.
+
+## 2026-03-24 - Rapid Sequential Data Entry Forms
+**Learning:** For rapid, sequential data entry forms in Streamlit, using individual inputs and an `st.button` with `st.success` creates a jarring experience. `st.success` flashes briefly and disappears immediately if an `st.rerun()` is called. Furthermore, clearing input fields manually is cumbersome.
+**Action:** Always wrap rapid entry fields in an `st.form` with `clear_on_submit=True`. Use `st.form_submit_button` to trigger the addition, and replace ephemeral `st.success` messages with `st.toast` notifications that persist across the automatic script rerun triggered by the form submission.
