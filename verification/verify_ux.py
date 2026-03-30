@@ -1,78 +1,45 @@
 from playwright.sync_api import sync_playwright
 
-def run():
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
-        context = browser.new_context(record_video_dir="verification/videos/")
-        page = context.new_page()
-        page.goto("http://localhost:8501")
-
-        # Wait for the app to load
-        page.wait_for_selector("text=Import Wizard")
-        print("Checking Import Data page...")
-        page.screenshot(path="verification/import_page.png")
-
-        print("Navigating to Run Reconciliation...")
-        # Streamlit sidebar radio buttons: target the associated label via text
-        page.locator('label').filter(has_text='Run Reconciliation').click()
+def verify_dashboard():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
 
         try:
-            page.wait_for_selector("text=Reconciliation Engine", timeout=5000)
-            print("Successfully navigated to Reconciliation Engine.")
-        except:
-            print("Failed to navigate. Taking debug screenshot.")
-            page.screenshot(path="verification/debug_nav_fail.png")
-            context.close()
+            # 1. Go to the local Streamlit app
+            page.goto("http://localhost:8501")
+
+            # Wait for Streamlit to load its initial state
+            page.wait_for_selector("text=Laundry Reconciler", timeout=10000)
+
+            # 2. Check if Dashboard is the active/default page
+            # Based on our changes, the Dashboard should load by default.
+            page.wait_for_selector("text=Reconciliation Dashboard", timeout=5000)
+
+            # 3. Check for the "Import Data" button on the empty state Dashboard
+            import_button = page.locator("button").filter(has_text="Import Data")
+            import_button.wait_for(state="visible", timeout=5000)
+
+            # 4. Take a screenshot of the Dashboard landing page
+            page.screenshot(path="verification/dashboard_landing.png", full_page=True)
+            print("Successfully verified Dashboard is the landing page.")
+
+            # 5. Click the "Import Data" button to ensure it navigates correctly
+            import_button.click()
+
+            # Wait for the Import Wizard page to load
+            page.wait_for_selector("text=Import Wizard", timeout=5000)
+
+            # Take a screenshot of the Import Wizard page
+            page.screenshot(path="verification/import_wizard.png", full_page=True)
+            print("Successfully navigated to Import Wizard.")
+
+        except Exception as e:
+            print(f"Verification failed: {e}")
+            page.screenshot(path="verification/error_state.png", full_page=True)
+            raise e
+        finally:
             browser.close()
-            return
-
-        page.wait_for_timeout(1000)
-
-        # Start Single Date Reconciliation
-        print("Looking for Start Reconciliation button...")
-        start_btn = page.locator("button").filter(has_text="▶️ Start Reconciliation")
-
-        if start_btn.is_visible():
-            print("Clicking Start Reconciliation button...")
-            start_btn.click()
-
-            # Wait for status container
-            try:
-                page.wait_for_selector("text=Reconciling Data...", timeout=5000)
-                print("Status container found.")
-            except:
-                print("Status container not found immediately.")
-
-            page.wait_for_timeout(2000)
-            page.screenshot(path="verification/reconciliation_process.png")
-        else:
-            print("Start Reconciliation button not found. Taking debug screenshot.")
-            page.screenshot(path="verification/debug_button_fail.png")
-
-        # Test Date Range mode
-        print("Switching to Date Range Mode...")
-        page.locator('label').filter(has_text='📆 Date Range').click()
-        page.wait_for_timeout(1000)
-
-        range_start_btn = page.locator("button").filter(has_text="▶️ Start Range Reconciliation")
-        if range_start_btn.is_visible():
-            print("Clicking Start Range Reconciliation button...")
-            range_start_btn.click()
-            try:
-                page.wait_for_selector("text=Reconciling Data Range...", timeout=5000)
-                print("Range status container found.")
-            except:
-                print("Range status container not found immediately.")
-
-            # Let it run for a bit
-            page.wait_for_timeout(3000)
-            page.screenshot(path="verification/range_reconciliation_process.png")
-        else:
-            print("Start Range Reconciliation button not found.")
-            page.screenshot(path="verification/debug_range_button_fail.png")
-
-        context.close()
-        browser.close()
 
 if __name__ == "__main__":
-    run()
+    verify_dashboard()

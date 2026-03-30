@@ -611,10 +611,8 @@ def page_import(session_db):
 
     if done == total and total > 0:
         st.success("🎉 All imports complete!")
-        def _nav_to_recon():
-            st.session_state['nav_radio'] = "Run Reconciliation"
-        
-        st.button("▶️ Go to Run Reconciliation", type="primary", key="nav_to_recon", on_click=_nav_to_recon)
+        if st.button("▶️ Run Reconciliation", type="primary", key="btn_open_recon_dialog"):
+            _recon_dialog()
 
     # Reset button
     col1, col2 = st.columns([4, 1])
@@ -713,8 +711,8 @@ def page_reconciliation(session_db):
                 if late > 0:
                     st.warning(f"⚠️ {late} late payment(s) detected")
 
-                st.button("📊 View Results", key="nav_to_results_single",
-                          on_click=navigate_to, args=("View Results",))
+                st.button("📊 View Dashboard", key="nav_to_results_single",
+                          on_click=navigate_to, args=("Dashboard",))
 
     else:
         # Date range mode
@@ -795,9 +793,8 @@ def page_reconciliation(session_db):
                 st.session_state['range_results'] = totals
                 st.session_state['range_dates'] = (str(start_date), str(end_date))
 
-                if st.button("📊 View Results", type="primary", key="nav_to_results_range"):
-                    st.session_state['nav_radio'] = "View Results"
-                    st.rerun()
+                st.button("📊 View Dashboard", type="primary", key="nav_to_results_range",
+                          on_click=navigate_to, args=("Dashboard",))
 
 
 # ── Period Summary (Monthly / Quarterly) ─────────────────
@@ -973,16 +970,16 @@ def _render_period_summary(session_db, view_mode: str):
 
 
 
-# ── Page: View Results ────────────────────────────────────
+# ── Page: Dashboard ───────────────────────────────────────
 
-def page_results(session_db):
+def page_dashboard(session_db):
     st.header("📊 Reconciliation Dashboard")
 
     runs = session_db.query(ReconciliationRun).order_by(ReconciliationRun.run_date.desc()).all()
     if not runs:
-        st.info("No reconciliation runs found. You need to run reconciliation first.")
-        st.button("▶️ Go to Run Reconciliation", type="primary", key="nav_to_recon_empty_results",
-                  on_click=navigate_to, args=("Run Reconciliation",))
+        st.info("No reconciliation runs found. You need to import data and run reconciliation first.")
+        st.button("📥 Import Data", type="primary", key="nav_to_import_empty_results",
+                  on_click=navigate_to, args=("Import Data",))
         return
 
     # View mode selector
@@ -1528,6 +1525,45 @@ def page_results(session_db):
                     )
 
 
+# ── Reconciliation Dialog ─────────────────────────────────
+
+@st.dialog("Run Reconciliation")
+def _recon_dialog():
+    session_db = get_session()
+    try:
+        run_date = st.date_input("Select Date to Reconcile", value=date.today(), key="dialog_run_date")
+        if st.button("▶️ Start Reconciliation", type="primary", key="dialog_start_recon"):
+            success = False
+            with st.status("Reconciling Data...", expanded=True) as status:
+                try:
+                    st.write("Running Matching Service...")
+                    matcher = MatchingService(session_db)
+                    matcher.match_notepad_deliveries()
+                    matcher.match_mswipe_payments()
+
+                    st.write(f"Running Reconciliation for {run_date}...")
+                    recon = ReconciliationService(session_db)
+                    recon.run_reconciliation(run_date)
+
+                    status.update(label="Reconciliation Complete!", state="complete", expanded=False)
+                    success = True
+                except LaundryReconcilerError as e:
+                    status.update(label="Reconciliation Failed", state="error", expanded=False)
+                    st.error(f"❌ Reconciliation Failed: {e}")
+                except Exception as e:
+                    status.update(label="Unexpected Error", state="error", expanded=False)
+                    st.error(f"❌ Unexpected Error: {e}")
+
+            if success:
+                st.success("✅ Reconciliation Complete!")
+
+        if success:
+            st.button("📊 View Dashboard", type="primary", key="dialog_nav_to_dashboard",
+                      on_click=navigate_to, args=("Dashboard",))
+
+    finally:
+        session_db.close()
+
 # ── Page: History ─────────────────────────────────────────
 
 def page_history(session_db):
@@ -1568,7 +1604,7 @@ st.title("🧺 Laundry Reconciler")
 
 # Sidebar navigation
 st.sidebar.title("Navigation")
-pages = ["Import Data", "Run Reconciliation", "View Results", "History"]
+pages = ["Dashboard", "Import Data", "Run Reconciliation", "History"]
 page = st.sidebar.radio(
     "Go to",
     pages,
@@ -1579,12 +1615,12 @@ page = st.sidebar.radio(
 session_db = get_session()
 
 try:
-    if page == "Import Data":
+    if page == "Dashboard":
+        page_dashboard(session_db)
+    elif page == "Import Data":
         page_import(session_db)
     elif page == "Run Reconciliation":
         page_reconciliation(session_db)
-    elif page == "View Results":
-        page_results(session_db)
     elif page == "History":
         page_history(session_db)
 finally:
