@@ -1,15 +1,3 @@
-## 2026-02-23 - Progressive Disclosure for Long Processes
-**Learning:** In Streamlit apps, sequential `st.info` messages for multi-step processes create clutter and don't effectively communicate progress. `st.status` containers provide a clean, collapsible way to show detailed progress without overwhelming the user, while still giving the crucial "something is happening" feedback.
-**Action:** Use `st.status` for any process involving more than 2 distinct steps or taking > 3 seconds.
-
-## 2026-02-23 - Streamlit File Uploaders and Previews
-**Learning:** Adding a preview for `st.file_uploader` requires careful handling of the file pointer. The uploaded file is a stream; reading it for preview (e.g., with Pandas) consumes the stream. You MUST call `.seek(0)` both *before* reading the preview AND *after* finishing the preview, so that subsequent import logic receives a fresh stream. Failure to reset the pointer results in empty imports.
-**Action:** Always wrap preview logic in a `try...finally` block where the `finally` clause executes `uploaded_file.seek(0)`.
-
-## 2026-02-24 - Provide Data Previews
-**Learning:** In data upload forms, users often doubt if they uploaded the correct file (especially with ambiguous names like "export.csv"). Providing a small, embedded preview of the data (e.g. first 5 rows) immediately after upload builds confidence before they commit to an import action.
-**Action:** Use `st.expander` with `pd.read_csv` or `pd.read_excel` to show a snapshot of uploaded data, remembering to reset the file pointer (`.seek(0)`) to not break downstream logic.
-
-## 2026-03-21 - Navigation Empty States and Streamlit Callbacks
-**Learning:** Empty states with "dead-end" warning messages create friction. Providing a direct Call-to-Action (CTA) button to the next logical step (e.g., navigating to a data generation page) significantly improves flow. However, in Streamlit, directly mutating a widget's session state (like a sidebar navigation radio) *after* it has been rendered causes a fatal `StreamlitAPIException`. Navigation must be handled via `on_click` callbacks attached to buttons, rather than inline state mutation followed by `st.rerun()`.
-**Action:** Replace dead-end warnings with `st.info` and a primary CTA button. Implement programmatic navigation using `on_click=navigate_to_callback` instead of setting `st.session_state` directly.
+## 2025-04-02 - Accessible and Smooth Sequential Form Entry in Streamlit
+**Learning:** Sequential data entry using independent Streamlit inputs often leads to poor UX. Using `st.success()` causes notifications to flash briefly and vanish when `st.rerun()` is called. Furthermore, using `st.form(clear_on_submit=True)` blindly wipes user data even if validation fails, which is highly frustrating. Modifying a widget's session state key (like `st.session_state.np_customer = ""`) directly in the script flow throws a `StreamlitAPIException`.
+**Action:** For sequential entry forms requiring validation in Streamlit, use standard inputs (not `st.form`) but link them to a submit button with an `on_click` callback. Validate the inputs inside the callback. If successful, use `st.toast()` for a persistent success notification, and manually clear the specific session state keys of the inputs within the callback itself (before the script rerun occurs). Lastly, explicitly mark mandatory fields with an asterisk `*` in the label and the `help="Required field"` parameter.

@@ -385,35 +385,54 @@ def render_notepad_step(session_db, is_unlocked):
         with st.expander("➕ Add Order Details", expanded=len(st.session_state.notepad_entries) == 0):
             col1, col2 = st.columns(2)
             with col1:
-                entry_date = st.date_input("Delivery Date", value=date.today(), key="np_date")
-                entry_customer = st.text_input("Customer Name (optional)", key="np_customer")
-                entry_order = st.text_input("Order Number", key="np_order",
-                                           placeholder="e.g. T697")
-                entry_runner = st.text_input("Runner Name", key="np_runner")
+                st.date_input("Delivery Date *", value=date.today(), key="np_date", help="Required field")
+                st.text_input("Customer Name (optional)", key="np_customer")
+                st.text_input("Order Number *", key="np_order",
+                             placeholder="e.g. T697", help="Required field")
+                st.text_input("Runner Name *", key="np_runner", help="Required field")
             with col2:
-                entry_amount = st.number_input("Amount Collected (₹)", min_value=0.0,
-                                              step=10.0, key="np_amount")
-                entry_mode = st.selectbox("Payment Mode", 
-                                         ["Cash", "Google Pay", "Paytm", "Package", "Card", "Other"],
-                                         key="np_mode")
-                entry_notes = st.text_area("Notes (optional)", key="np_notes",
-                                          placeholder="Any remarks...", height=68)
+                st.number_input("Amount Collected (₹) *", min_value=0.0,
+                               step=10.0, key="np_amount", help="Required field")
+                st.selectbox("Payment Mode *",
+                            ["Cash", "Google Pay", "Paytm", "Package", "Card", "Other"],
+                            key="np_mode", help="Required field")
+                st.text_area("Notes (optional)", key="np_notes",
+                            placeholder="Any remarks...", height=68)
 
-            if st.button("➕ Add Order Details", key="btn_add_notepad", type="primary"):
+            def _submit_notepad():
+                entry_order = st.session_state.get('np_order')
+                entry_runner = st.session_state.get('np_runner')
+
                 if not entry_order:
-                    st.error("Please enter an Order Number")
+                    st.session_state['np_error'] = "Please enter an Order Number"
+                elif not entry_runner:
+                    st.session_state['np_error'] = "Please enter a Runner Name"
                 else:
                     st.session_state.notepad_entries.append({
-                        'delivery_date': entry_date,
-                        'customer_name': entry_customer,
+                        'delivery_date': st.session_state.get('np_date'),
+                        'customer_name': st.session_state.get('np_customer'),
                         'order_number': entry_order,
-                        'amount_collected': entry_amount,
-                        'payment_mode': entry_mode,
+                        'amount_collected': st.session_state.get('np_amount'),
+                        'payment_mode': st.session_state.get('np_mode'),
                         'runner_name': entry_runner,
-                        'notes': entry_notes,
+                        'notes': st.session_state.get('np_notes'),
                     })
-                    st.success(f"Added entry for {entry_customer or entry_order}")
-                    st.rerun()
+                    st.toast(f"✅ Added entry for {st.session_state.get('np_customer') or entry_order}")
+
+                    # Clear inputs on successful submission
+                    st.session_state.np_customer = ""
+                    st.session_state.np_order = ""
+                    st.session_state.np_runner = ""
+                    st.session_state.np_amount = 0.0
+                    st.session_state.np_notes = ""
+                    st.session_state['np_error'] = None
+
+            st.button("➕ Add Order Details", key="btn_add_notepad", type="primary", on_click=_submit_notepad)
+
+            if st.session_state.get('np_error'):
+                st.error(st.session_state['np_error'])
+                # Clear the error immediately so it doesn't persist on next interactions
+                st.session_state['np_error'] = None
 
         # ── Show queued entries ──
         entries = st.session_state.notepad_entries
