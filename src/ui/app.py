@@ -264,6 +264,34 @@ def _init_notepad_entries():
         st.session_state.notepad_entries = []
 
 
+def _add_notepad_entry():
+    entry_order = st.session_state.np_order
+    entry_customer = st.session_state.np_customer
+    entry_amount = st.session_state.np_amount
+    entry_notes = st.session_state.np_notes
+    entry_date = st.session_state.np_date
+    entry_runner = st.session_state.np_runner
+    entry_mode = st.session_state.np_mode
+
+    if not entry_order:
+        st.toast("❌ Please enter an Order Number", icon="❌")
+    else:
+        st.session_state.notepad_entries.append({
+            'delivery_date': entry_date,
+            'customer_name': entry_customer,
+            'order_number': entry_order,
+            'amount_collected': entry_amount,
+            'payment_mode': entry_mode,
+            'runner_name': entry_runner,
+            'notes': entry_notes,
+        })
+        st.toast(f"✅ Added entry for {entry_customer or entry_order}", icon="✅")
+        # Clear fields for next entry
+        for key in ['np_order', 'np_customer', 'np_amount', 'np_notes']:
+            if key in st.session_state:
+                del st.session_state[key]
+
+
 def render_notepad_step(session_db, is_unlocked):
     """Step 5: Runner Notepad — file upload OR manual entry."""
     state = st.session_state.imports['notepad']
@@ -387,8 +415,8 @@ def render_notepad_step(session_db, is_unlocked):
             with col1:
                 entry_date = st.date_input("Delivery Date", value=date.today(), key="np_date")
                 entry_customer = st.text_input("Customer Name (optional)", key="np_customer")
-                entry_order = st.text_input("Order Number", key="np_order",
-                                           placeholder="e.g. T697")
+                entry_order = st.text_input("Order Number *", key="np_order",
+                                           placeholder="e.g. T697", help="Required field")
                 entry_runner = st.text_input("Runner Name", key="np_runner")
             with col2:
                 entry_amount = st.number_input("Amount Collected (₹)", min_value=0.0,
@@ -399,21 +427,7 @@ def render_notepad_step(session_db, is_unlocked):
                 entry_notes = st.text_area("Notes (optional)", key="np_notes",
                                           placeholder="Any remarks...", height=68)
 
-            if st.button("➕ Add Order Details", key="btn_add_notepad", type="primary"):
-                if not entry_order:
-                    st.error("Please enter an Order Number")
-                else:
-                    st.session_state.notepad_entries.append({
-                        'delivery_date': entry_date,
-                        'customer_name': entry_customer,
-                        'order_number': entry_order,
-                        'amount_collected': entry_amount,
-                        'payment_mode': entry_mode,
-                        'runner_name': entry_runner,
-                        'notes': entry_notes,
-                    })
-                    st.success(f"Added entry for {entry_customer or entry_order}")
-                    st.rerun()
+            st.button("➕ Add Order Details", key="btn_add_notepad", type="primary", on_click=_add_notepad_entry)
 
         # ── Show queued entries ──
         entries = st.session_state.notepad_entries

@@ -32,6 +32,8 @@ def test_ui_import_and_basic_structure():
 
     # Now try to import the app
     try:
+        if 'src.ui.app' in sys.modules:
+            del sys.modules['src.ui.app']
         import src.ui.app
     except Exception as e:
         pytest.fail(f"Failed to import src.ui.app: {e}")
