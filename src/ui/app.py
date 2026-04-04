@@ -385,17 +385,17 @@ def render_notepad_step(session_db, is_unlocked):
         with st.expander("➕ Add Order Details", expanded=len(st.session_state.notepad_entries) == 0):
             col1, col2 = st.columns(2)
             with col1:
-                entry_date = st.date_input("Delivery Date", value=date.today(), key="np_date")
+                entry_date = st.date_input("Delivery Date *", value=date.today(), key="np_date", help="Required field")
                 entry_customer = st.text_input("Customer Name (optional)", key="np_customer")
-                entry_order = st.text_input("Order Number", key="np_order",
-                                           placeholder="e.g. T697")
+                entry_order = st.text_input("Order Number *", key="np_order",
+                                           placeholder="e.g. T697", help="Required field")
                 entry_runner = st.text_input("Runner Name", key="np_runner")
             with col2:
-                entry_amount = st.number_input("Amount Collected (₹)", min_value=0.0,
-                                              step=10.0, key="np_amount")
-                entry_mode = st.selectbox("Payment Mode", 
+                entry_amount = st.number_input("Amount Collected (₹) *", min_value=0.0,
+                                              step=10.0, key="np_amount", help="Required field")
+                entry_mode = st.selectbox("Payment Mode *",
                                          ["Cash", "Google Pay", "Paytm", "Package", "Card", "Other"],
-                                         key="np_mode")
+                                         key="np_mode", help="Required field")
                 entry_notes = st.text_area("Notes (optional)", key="np_notes",
                                           placeholder="Any remarks...", height=68)
 
@@ -1027,7 +1027,9 @@ def page_results(session_db):
             date_label = f"{start_dt.strftime('%b %d, %Y')} - {end_dt.strftime('%b %d, %Y')}"
 
         if not selected_runs:
-            st.warning(f"No reconciliation runs found between {start_dt} and {end_dt}.")
+            st.info(f"No reconciliation runs found between {start_dt} and {end_dt}.")
+            st.button("▶️ Go to Run Reconciliation", type="primary", key="nav_to_recon_empty_range",
+                      on_click=navigate_to, args=("Run Reconciliation",))
             return
 
         st.info(f"📊 Showing results for **{len(selected_runs)} days** from {date_label}")
