@@ -387,8 +387,8 @@ def render_notepad_step(session_db, is_unlocked):
             with col1:
                 entry_date = st.date_input("Delivery Date", value=date.today(), key="np_date")
                 entry_customer = st.text_input("Customer Name (optional)", key="np_customer")
-                entry_order = st.text_input("Order Number", key="np_order",
-                                           placeholder="e.g. T697")
+                entry_order = st.text_input("Order Number *", key="np_order",
+                                           placeholder="e.g. T697", help="Required field")
                 entry_runner = st.text_input("Runner Name", key="np_runner")
             with col2:
                 entry_amount = st.number_input("Amount Collected (₹)", min_value=0.0,
@@ -412,7 +412,11 @@ def render_notepad_step(session_db, is_unlocked):
                         'runner_name': entry_runner,
                         'notes': entry_notes,
                     })
-                    st.success(f"Added entry for {entry_customer or entry_order}")
+                    st.toast(f"✅ Added entry for {entry_customer or entry_order}")
+                    # Clear session state for next entry to reduce friction
+                    for k in ['np_customer', 'np_order', 'np_runner', 'np_amount', 'np_notes']:
+                        if k in st.session_state:
+                            del st.session_state[k]
                     st.rerun()
 
         # ── Show queued entries ──
