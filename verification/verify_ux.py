@@ -1,78 +1,47 @@
+import sys
+import os
+import time
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from playwright.sync_api import sync_playwright
 
-def run():
-    with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
-        context = browser.new_context(record_video_dir="verification/videos/")
+def main():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context(
+            viewport={'width': 1280, 'height': 800},
+            record_video_dir="verification/videos/"
+        )
         page = context.new_page()
-        page.goto("http://localhost:8501")
 
-        # Wait for the app to load
-        page.wait_for_selector("text=Import Wizard")
-        print("Checking Import Data page...")
-        page.screenshot(path="verification/import_page.png")
+        print("Navigating to local Streamlit app...")
+        page.goto('http://localhost:8501')
+        page.wait_for_selector('text="🧺 Laundry Reconciler"', timeout=10000)
 
-        print("Navigating to Run Reconciliation...")
-        # Streamlit sidebar radio buttons: target the associated label via text
-        page.locator('label').filter(has_text='Run Reconciliation').click()
+        print("Navigating to Import Data page...")
+        page.locator('label').filter(has_text='Import Data').click()
+        time.sleep(2)
 
+        print("Mocking CRM Sales import to unlock Notepad tab...")
+        page.locator('input[type="file"]').first.set_input_files('sample/SalesAndDeliveryCRMExport-November.xlsx')
+        time.sleep(2)
+        page.locator('button').filter(has_text='🚀 Import').first.click()
+        time.sleep(3)
+
+        print("Attempting to directly click Manual Entry...")
         try:
-            page.wait_for_selector("text=Reconciliation Engine", timeout=5000)
-            print("Successfully navigated to Reconciliation Engine.")
-        except:
-            print("Failed to navigate. Taking debug screenshot.")
-            page.screenshot(path="verification/debug_nav_fail.png")
-            context.close()
-            browser.close()
-            return
+            page.locator('button[data-baseweb="tab"]').filter(has_text='Manual Entry').click()
+            time.sleep(1)
+        except Exception as e:
+            print(f"Could not click Manual Entry directly: {e}")
 
-        page.wait_for_timeout(1000)
+        print("Taking screenshot...")
+        page.screenshot(path='verification/ux_screenshot.png')
 
-        # Start Single Date Reconciliation
-        print("Looking for Start Reconciliation button...")
-        start_btn = page.locator("button").filter(has_text="▶️ Start Reconciliation")
-
-        if start_btn.is_visible():
-            print("Clicking Start Reconciliation button...")
-            start_btn.click()
-
-            # Wait for status container
-            try:
-                page.wait_for_selector("text=Reconciling Data...", timeout=5000)
-                print("Status container found.")
-            except:
-                print("Status container not found immediately.")
-
-            page.wait_for_timeout(2000)
-            page.screenshot(path="verification/reconciliation_process.png")
-        else:
-            print("Start Reconciliation button not found. Taking debug screenshot.")
-            page.screenshot(path="verification/debug_button_fail.png")
-
-        # Test Date Range mode
-        print("Switching to Date Range Mode...")
-        page.locator('label').filter(has_text='📆 Date Range').click()
-        page.wait_for_timeout(1000)
-
-        range_start_btn = page.locator("button").filter(has_text="▶️ Start Range Reconciliation")
-        if range_start_btn.is_visible():
-            print("Clicking Start Range Reconciliation button...")
-            range_start_btn.click()
-            try:
-                page.wait_for_selector("text=Reconciling Data Range...", timeout=5000)
-                print("Range status container found.")
-            except:
-                print("Range status container not found immediately.")
-
-            # Let it run for a bit
-            page.wait_for_timeout(3000)
-            page.screenshot(path="verification/range_reconciliation_process.png")
-        else:
-            print("Start Range Reconciliation button not found.")
-            page.screenshot(path="verification/debug_range_button_fail.png")
+        print("Done. Screenshot saved to verification/ux_screenshot.png")
 
         context.close()
         browser.close()
 
 if __name__ == "__main__":
-    run()
+    main()
