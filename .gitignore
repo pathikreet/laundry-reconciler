@@ -8,3 +8,4 @@ __pycache__/
 venv
 *.xlsx
 *.csv
+streamlit_output.log
