@@ -8,155 +8,40 @@ Collecting usage statistics. To deactivate, set browser.gatherUsageStats to fals
   Network URL: http://192.168.0.2:8501
   External URL: http://34.27.142.64:8501
 
-2026-03-21 17:08:52.615 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1180, in <module>
-    page_results(session_db)
-  File "/app/src/ui/app.py", line 750, in page_results
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-2026-03-21 17:09:14.522 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1180, in <module>
-    page_results(session_db)
-  File "/app/src/ui/app.py", line 750, in page_results
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-2026-03-21 17:09:48.707 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1180, in <module>
-    page_results(session_db)
-  File "/app/src/ui/app.py", line 750, in page_results
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-2026-03-21 17:10:19.055 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1180, in <module>
-    page_results(session_db)
-  File "/app/src/ui/app.py", line 750, in page_results
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-2026-03-21 17:10:38.779 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1180, in <module>
-    page_results(session_db)
-  File "/app/src/ui/app.py", line 750, in page_results
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-2026-03-21 17:10:39.232 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1182, in <module>
-    page_history(session_db)
-  File "/app/src/ui/app.py", line 1146, in page_history
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-Database initialized at laundry_reconciler.db
-  Stopping...
+2026-04-14 17:40:15,757 [INFO] src.services.matching: Notepad matching: {'exact': 0, 'fuzzy': 0, 'unmatched': 0, 'total': 0}
+2026-04-14 17:40:15,761 [INFO] src.services.matching: MSWIPE matching: {'matched': 0, 'ambiguous': 0, 'unmatched': 0, 'total': 0}
+2026-04-14 17:40:15,824 [INFO] src.services.reconciliation: Reconciliation complete for 2026-04-14: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,007 [INFO] src.services.matching: Notepad matching: {'exact': 0, 'fuzzy': 0, 'unmatched': 0, 'total': 0}
+2026-04-14 17:40:19,015 [INFO] src.services.matching: MSWIPE matching: {'matched': 0, 'ambiguous': 0, 'unmatched': 0, 'total': 0}
+2026-04-14 17:40:19,071 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-01: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,090 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-02: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,108 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-03: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,126 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-04: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,147 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-05: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,182 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-06: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,207 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-07: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,230 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-08: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,250 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-09: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,273 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-10: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,297 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-11: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,317 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-12: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,336 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-13: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,365 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-14: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,390 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-15: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,413 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-16: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,435 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-17: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,454 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-18: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,475 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-19: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,506 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-20: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,534 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-21: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,556 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-22: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,577 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-23: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,599 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-24: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,618 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-25: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,639 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-26: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,661 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-27: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,680 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-28: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,701 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-29: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,725 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-30: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-04-14 17:40:19,727 [INFO] src.services.reconciliation: Range reconciliation 2025-11-01 to 2025-11-30: 30 days, 0 total exceptions
+2026-04-14 17:41:56,856 [WARNING] src.importers.base: No valid data to import from /tmp/tmpzwmmphwk.csv
