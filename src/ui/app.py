@@ -1554,6 +1554,349 @@ def page_history(session_db):
                   on_click=navigate_to, args=("Run Reconciliation",))
 
 
+# ── Page: Order Lookup ────────────────────────────────────
+
+def page_order_lookup(session_db):
+    st.header("🔍 Order Lookup")
+    st.caption(
+        "Search by order number to see its complete history across all data sources: "
+        "CRM Sales, CRM Orders, CRM Delivery, MSWIPE, Notepad, and any reconciliation exceptions."
+    )
+
+    # ── Search bar ──
+    col_input, col_btn = st.columns([3, 1])
+    with col_input:
+        query = st.text_input(
+            "Order Number",
+            placeholder="e.g. T697 or partial like T69",
+            key="order_lookup_query",
+            label_visibility="collapsed",
+        )
+    with col_btn:
+        do_search = st.button("🔍 Search", type="primary", key="order_lookup_btn", use_container_width=True)
+
+    if not query and not do_search:
+        st.info("Enter an order number above and press Search.")
+        return
+
+    if not query:
+        st.warning("Please enter an order number to search.")
+        return
+
+    # ── Find matching orders (exact first, then partial) ──
+    from sqlalchemy import or_
+    q = query.strip()
+    orders = (
+        session_db.query(Order)
+        .filter(Order.order_number.ilike(f"%{q}%"))
+        .order_by(Order.order_date.desc())
+        .limit(20)
+        .all()
+    )
+
+    if not orders:
+        st.error(f"No orders found matching **'{q}'**. Try a shorter prefix or check the order number.")
+        return
+
+    # ── If multiple matches, let user pick ──
+    if len(orders) > 1:
+        st.info(f"Found **{len(orders)}** orders matching **'{q}'**. Select one to view details.")
+        order_options = {
+            f"{o.order_number} — {o.customer_name or '?'} — ₹{float(o.order_amount):,.0f} ({o.order_date})": o.id
+            for o in orders
+        }
+        selected_label = st.selectbox("Select Order", list(order_options.keys()), key="order_lookup_select")
+        order = session_db.get(Order, order_options[selected_label])
+    else:
+        order = orders[0]
+
+    if not order:
+        st.error("Order not found.")
+        return
+
+    # ══════════════════════════════════════════════════════
+    # ORDER HEADER CARD
+    # ══════════════════════════════════════════════════════
+    st.divider()
+
+    # Compute quick stats
+    total_paid_crm = sum(float(p.amount) for p in order.payments if p.source == 'crm')
+    total_paid_mswipe = sum(float(p.amount) for p in order.payments if p.source == 'mswipe')
+    total_paid_notepad = sum(float(d.amount_collected or 0) for d in order.deliveries if d.source == 'notepad')
+    open_exceptions = [e for e in order.exceptions if e.resolution_status == 'open']
+    crm_delivery = [d for d in order.deliveries if d.source == 'crm']
+    notepad_delivery = [d for d in order.deliveries if d.source == 'notepad']
+
+    # Header metrics
+    content = f"""
+<div style="background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:12px;padding:20px 24px;margin-bottom:16px;border:1px solid #0f3460;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+        <span style="font-size:1.8rem;">📦</span>
+        <div>
+            <h2 style="margin:0;color:#e2e8f0;font-size:1.4rem;">Order {order.order_number}</h2>
+            <p style="margin:0;color:#94a3b8;font-size:0.9rem;">{order.customer_name or 'Unknown Customer'}{' · ' + str(order.customer_mobile) if order.customer_mobile else ''}</p>
+        </div>
+    </div>
+</div>
+"""
+    st.markdown(content, unsafe_allow_html=True)
+
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("🗓️ Order Date", str(order.order_date))
+    c2.metric("💰 Order Amount", f"₹{float(order.order_amount):,.0f}")
+    c3.metric("✅ Balance (CRM)", f"₹{float(order.balance):,.0f}")
+    c4.metric("🚚 Deliveries", f"{len(crm_delivery)} CRM · {len(notepad_delivery)} Notepad")
+    c5.metric(
+        "⚠️ Open Exceptions",
+        str(len(open_exceptions)),
+        delta="needs attention" if open_exceptions else None,
+        delta_color="inverse" if open_exceptions else "off",
+    )
+
+    st.divider()
+
+    # ══════════════════════════════════════════════════════
+    # TABS
+    # ══════════════════════════════════════════════════════
+    tab_crm, tab_crm_orders, tab_delivery, tab_mswipe, tab_notepad, tab_exceptions_tab = st.tabs([
+        "🧾 CRM Sales", "📋 CRM Orders", "🚚 Delivery", "💳 MSWIPE", "📝 Notepad", "⚠️ Exceptions"
+    ])
+
+    # ── TAB 1: CRM Sales payments ──
+    with tab_crm:
+        st.subheader("CRM Sales — Payment Events")
+        crm_payments = [p for p in order.payments if p.source == 'crm']
+        if crm_payments:
+            rows = []
+            for p in sorted(crm_payments, key=lambda x: x.payment_date):
+                rows.append({
+                    'Date': str(p.payment_date),
+                    'Amount': f"₹{float(p.amount):,.0f}",
+                    'Mode': p.payment_mode or '—',
+                    'Original Mode': p.original_mode or '—',
+                    'Txn ID': p.online_txn_id or '—',
+                    'Accept By': p.accept_by or '—',
+                })
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            total = sum(float(p.amount) for p in crm_payments)
+            st.info(f"**{len(crm_payments)} payment event(s)** · Total collected: **₹{total:,.0f}**")
+        else:
+            st.warning("No CRM Sales payment events found for this order.")
+
+        # Show raw_data from CRM Orders enrichment
+        raw = order.raw_data or {}
+        if raw:
+            crm_meta_rows = []
+            for k in ('Net Amount', 'Due Date', 'Pcs', 'Package', 'Status', 'Due Amount'):
+                if k in raw:
+                    crm_meta_rows.append({'Field': k, 'Value': str(raw[k])})
+            if crm_meta_rows:
+                st.divider()
+                st.caption("📋 CRM Orders metadata attached to this order:")
+                st.dataframe(pd.DataFrame(crm_meta_rows), use_container_width=True, hide_index=True)
+
+    # ── TAB 2: CRM Orders enrichment ──
+    with tab_crm_orders:
+        st.subheader("CRM Orders — Authoritative Data")
+        raw = order.raw_data or {}
+        if raw:
+            field_rows = []
+            interesting_keys = [
+                'Net Amount', 'Due Amount', 'Due Date', 'Pcs', 'Package',
+                'Status', 'Order Status', 'Delivery Date', 'Delivered Pcs',
+            ]
+            # Show known interesting fields first, then any extras
+            shown = set()
+            for k in interesting_keys:
+                if k in raw:
+                    field_rows.append({'Field': k, 'Value': str(raw[k])})
+                    shown.add(k)
+            for k, v in raw.items():
+                if k not in shown:
+                    field_rows.append({'Field': k, 'Value': str(v)})
+            st.dataframe(pd.DataFrame(field_rows), use_container_width=True, hide_index=True)
+        else:
+            st.info("No CRM Orders data found for this order. Import the CRM Orders report to enrich it.")
+
+        st.divider()
+        st.caption("Core order record fields:")
+        core_rows = [
+            {'Field': 'Customer Code', 'Value': order.customer_code or '—'},
+            {'Field': 'Customer Name', 'Value': order.customer_name or '—'},
+            {'Field': 'Customer Address', 'Value': order.customer_address or '—'},
+            {'Field': 'Customer Mobile', 'Value': order.customer_mobile or '—'},
+            {'Field': 'Order Date', 'Value': str(order.order_date)},
+            {'Field': 'Order Amount', 'Value': f"₹{float(order.order_amount):,.0f}"},
+            {'Field': 'Payment Received (CRM)', 'Value': f"₹{float(order.payment_received):,.0f}"},
+            {'Field': 'Adjustments', 'Value': f"₹{float(order.adjustments):,.0f}"},
+            {'Field': 'Balance (CRM)', 'Value': f"₹{float(order.balance):,.0f}"},
+            {'Field': 'Type', 'Value': order.type or '—'},
+        ]
+        st.dataframe(pd.DataFrame(core_rows), use_container_width=True, hide_index=True)
+
+    # ── TAB 3: Delivery events ──
+    with tab_delivery:
+        st.subheader("Delivery Events")
+
+        col_crm_del, col_np_del = st.columns(2)
+
+        with col_crm_del:
+            st.markdown("**📦 CRM Delivery**")
+            if crm_delivery:
+                crm_del_rows = []
+                for d in sorted(crm_delivery, key=lambda x: x.delivery_date):
+                    crm_del_rows.append({
+                        'Delivery Date': str(d.delivery_date),
+                        'Customer': d.customer_name or '—',
+                        'Runner': d.runner_name or '—',
+                        'Notes': d.notes or '—',
+                    })
+                st.dataframe(pd.DataFrame(crm_del_rows), use_container_width=True, hide_index=True)
+            else:
+                st.info("No CRM delivery records found.")
+                st.caption("Import the CRM Delivery report to see delivery dates.")
+
+        with col_np_del:
+            st.markdown("**📝 Notepad Deliveries**")
+            if notepad_delivery:
+                np_del_rows = []
+                for d in sorted(notepad_delivery, key=lambda x: x.delivery_date):
+                    np_del_rows.append({
+                        'Delivery Date': str(d.delivery_date),
+                        'Customer': d.customer_name or '—',
+                        'Amount Collected': f"₹{float(d.amount_collected or 0):,.0f}",
+                        'Mode': d.payment_mode or '—',
+                        'Runner': d.runner_name or '—',
+                        'Notes': d.notes or '—',
+                        'Confidence': f"{float(d.confidence_score or 0):.0%}" if d.confidence_score else 'Manual',
+                    })
+                st.dataframe(pd.DataFrame(np_del_rows), use_container_width=True, hide_index=True)
+            else:
+                st.info("No Notepad delivery records linked to this order.")
+
+    # ── TAB 4: MSWIPE ──
+    with tab_mswipe:
+        st.subheader("MSWIPE — Card / UPI Transactions")
+        mswipe_payments = [p for p in order.payments if p.source == 'mswipe']
+        if mswipe_payments:
+            ms_rows = []
+            for p in sorted(mswipe_payments, key=lambda x: x.payment_date):
+                ms_rows.append({
+                    'Date': str(p.payment_date),
+                    'Amount': f"₹{float(p.amount):,.0f}",
+                    'Mode': p.original_mode or p.payment_mode or '—',
+                    'Ref IDs': ', '.join(str(r) for r in (p.mswipe_ref_ids or [])) or '—',
+                    'VPA': p.payee_vpa or '—',
+                    'Confidence': f"{float(p.confidence_score or 0):.0%}" if p.confidence_score else '—',
+                })
+            st.dataframe(pd.DataFrame(ms_rows), use_container_width=True, hide_index=True)
+            total_ms = sum(float(p.amount) for p in mswipe_payments)
+            crm_gpay = sum(
+                float(p.amount) for p in order.payments
+                if p.source == 'crm' and (p.payment_mode or '').lower() in ('google pay', 'gpay', 'upi')
+            )
+            variance = crm_gpay - total_ms
+            st.info(f"**{len(mswipe_payments)} MSWIPE transaction(s)** · Total: **₹{total_ms:,.0f}**")
+            if crm_gpay > 0:
+                color = "green" if abs(variance) <= 2 else "red"
+                st.markdown(
+                    f"CRM GPay: **₹{crm_gpay:,.0f}** — MSWIPE: **₹{total_ms:,.0f}** — "
+                    f"<span style='color:{color}'>Variance: ₹{variance:,.0f}</span>",
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.info("No MSWIPE transactions linked to this order.")
+            st.caption(
+                "MSWIPE entries are linked during the matching phase of reconciliation. "
+                "Run reconciliation to establish links."
+            )
+
+    # ── TAB 5: Notepad payments ──
+    with tab_notepad:
+        st.subheader("Notepad — Runner Payment Records")
+        notepad_payments = [p for p in order.payments if p.source == 'notepad']
+        if notepad_payments or notepad_delivery:
+            if notepad_payments:
+                st.markdown("**💰 Notepad Payment Events**")
+                np_pay_rows = []
+                for p in sorted(notepad_payments, key=lambda x: x.payment_date):
+                    np_pay_rows.append({
+                        'Date': str(p.payment_date),
+                        'Amount': f"₹{float(p.amount):,.0f}",
+                        'Mode': p.payment_mode or '—',
+                    })
+                st.dataframe(pd.DataFrame(np_pay_rows), use_container_width=True, hide_index=True)
+                total_np = sum(float(p.amount) for p in notepad_payments)
+                st.info(f"**{len(notepad_payments)} notepad payment(s)** · Total: **₹{total_np:,.0f}**")
+            else:
+                st.info("No separate notepad payment events (delivery records may carry the amount).")
+        else:
+            st.info("No Notepad records linked to this order.")
+
+    # ── TAB 6: Exceptions ──
+    with tab_exceptions_tab:
+        st.subheader("All Exceptions for This Order")
+        all_excs = sorted(order.exceptions, key=lambda e: e.created_at, reverse=True)
+
+        if not all_excs:
+            st.success("🎉 No exceptions have ever been raised for this order!")
+        else:
+            open_excs = [e for e in all_excs if e.resolution_status == 'open']
+            resolved_excs = [e for e in all_excs if e.resolution_status != 'open']
+
+            if open_excs:
+                st.error(f"🔴 **{len(open_excs)} open exception(s)** requiring attention")
+            if resolved_excs:
+                st.success(f"✅ {len(resolved_excs)} exception(s) resolved / false-positived")
+
+            for e in all_excs:
+                sev_icon = '🔴' if e.severity == 'high' else '🟡' if e.severity == 'medium' else '🟢'
+                status_icon = '✅' if e.resolution_status == 'resolved' else \
+                              '🚫' if e.resolution_status == 'false_positive' else '🔓'
+                run_date = e.reconciliation_run.run_date if e.reconciliation_run else '—'
+
+                with st.expander(
+                    f"{sev_icon} {e.exception_type} — {status_icon} {e.resolution_status.upper()} "
+                    f"(Run: {run_date})",
+                    expanded=e.resolution_status == 'open'
+                ):
+                    cols = st.columns([2, 1, 1])
+                    cols[0].markdown(f"**Suggested Action:** {e.suggested_action or '—'}")
+                    cols[1].markdown(f"**Severity:** {sev_icon} {e.severity}")
+                    cols[2].markdown(f"**Status:** {e.resolution_status}")
+
+                    if e.evidence:
+                        ev_rows = [
+                            {'Key': k, 'Value': str(v)}
+                            for k, v in e.evidence.items()
+                            if k != 'raw_data'
+                        ]
+                        if ev_rows:
+                            st.dataframe(pd.DataFrame(ev_rows), use_container_width=True, hide_index=True)
+
+                    if e.resolution_note:
+                        st.info(f"📝 Resolution note: {e.resolution_note}")
+
+                    # Inline resolve widget for open exceptions
+                    if e.resolution_status == 'open':
+                        st.divider()
+                        res_col1, res_col2, res_col3 = st.columns([2, 2, 1])
+                        resolution = res_col1.radio(
+                            "Action",
+                            ["resolved", "false_positive"],
+                            horizontal=True,
+                            key=f"lookup_resolve_act_{e.id}"
+                        )
+                        note = res_col2.text_input("Note (optional)", key=f"lookup_resolve_note_{e.id}")
+                        if res_col3.button("✅ Resolve", key=f"lookup_resolve_btn_{e.id}"):
+                            e.resolution_status = resolution
+                            e.resolution_note = note
+                            e.resolved_at = datetime.utcnow()
+                            session_db.commit()
+                            st.success(f"Exception {e.id} marked as '{resolution}'")
+                            st.rerun()
+
+
 # ── Main App ──────────────────────────────────────────────
 
 st.set_page_config(
@@ -1568,7 +1911,7 @@ st.title("🧺 Laundry Reconciler")
 
 # Sidebar navigation
 st.sidebar.title("Navigation")
-pages = ["Import Data", "Run Reconciliation", "View Results", "History"]
+pages = ["Import Data", "Run Reconciliation", "View Results", "Order Lookup", "History"]
 page = st.sidebar.radio(
     "Go to",
     pages,
@@ -1585,6 +1928,8 @@ try:
         page_reconciliation(session_db)
     elif page == "View Results":
         page_results(session_db)
+    elif page == "Order Lookup":
+        page_order_lookup(session_db)
     elif page == "History":
         page_history(session_db)
 finally:

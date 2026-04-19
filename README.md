@@ -41,6 +41,11 @@ The reconciliation engine automatically flags discrepancies across the imported 
 - **Python 3.9+**
 - **pip** (comes with Python)
 - **Git** (for cloning)
+- **Gemini CLI** — required for OCR parsing of handwritten runner notepad photos (see [Runner Notepad: OCR Parsing Guide](#-runner-notepad-ocr-parsing-guide-sop))
+  ```bash
+  npm install -g @google/gemini-cli
+  gemini auth login
+  ```
 
 ---
 
@@ -123,6 +128,154 @@ python -m src.cli reconcile 2025-11-15 --export
 ```
 
 > **Note:** Use `python -m src.cli` (not `python src/cli.py`). The `-m` flag ensures proper module resolution.
+
+---
+
+## 📋 Runner Notepad: OCR Parsing Guide (SOP)
+
+This section explains how to convert **handwritten runner delivery notepad photos** into structured CSV files that can be imported into the app. This is the required pre-processing step before the Notepad import in the UI wizard.
+
+### Overview
+
+```
+📷 Photo of handwritten notepad page
+        ↓  scripts/parse_batch.sh
+📄 Delivery_notes_<Month>.csv
+        ↓  UI Step 5 – Runner Notepad
+🗄️ Database (DeliveryEvents + PaymentEvents)
+```
+
+### Prerequisites
+
+1. **Gemini CLI** — must be installed and authenticated:
+   ```bash
+   # Install (if not already)
+   npm install -g @google/gemini-cli
+
+   # Authenticate
+   gemini auth login
+   ```
+
+2. **Register the `/tumbledry:parse` custom command** — the parse script calls `gemini /tumbledry:parse` internally, which is a custom Gemini CLI command defined in `scripts/commands/parse.toml`. You must register it before running the script.
+
+   **What the command does:** Instructs Gemini to act as a structured data extraction assistant — reading handwriting from an image and returning only raw CSV rows (no headers, no commentary). It enforces date cascading so that a date written as a heading above multiple entries is applied to every row in that group.
+
+   **How to register it:** Copy `parse.toml` to your Gemini CLI custom commands directory:
+
+   | OS | Commands directory |
+   |----|-------------------|
+   | macOS / Linux / Windows (WSL) | `~/.gemini/commands/tumbledry/` |
+   | Windows (Native) | `%APPDATA%\gemini\commands\tumbledry\` |
+
+   ```bash
+   # macOS / Linux / Windows (WSL)
+   mkdir -p ~/.gemini/commands/tumbledry
+   cp scripts/commands/parse.toml ~/.gemini/commands/tumbledry/parse.toml
+
+   # Windows (PowerShell)
+   New-Item -ItemType Directory -Force "$env:APPDATA\gemini\commands\tumbledry"
+   Copy-Item scripts\commands\parse.toml "$env:APPDATA\gemini\commands\tumbledry\parse.toml"
+   ```
+
+   Verify registration:
+   ```bash
+   gemini /tumbledry:parse --help
+   ```
+
+3. **The parse script** — located at `scripts/parse_batch.sh`. On macOS/Linux, make it executable once:
+   ```bash
+   chmod +x scripts/parse_batch.sh
+   ```
+
+4. **Image files** — photos of the runner notepad pages in `.jpg`, `.jpeg`, or `.png` format.
+   - Take clear, well-lit photos. Avoid shadows or blurry shots.
+   - Shoot straight-on (no skew). Each photo should cover one notepad page.
+
+---
+
+### Step 1 — Parse Notepad Photos into CSV
+
+#### Single photo
+
+```bash
+./scripts/parse_batch.sh /path/to/notepad_page.jpg
+```
+
+#### Batch — entire folder of photos
+
+```bash
+./scripts/parse_batch.sh /path/to/notepad_photos/
+```
+
+The script will process every `.jpg`, `.jpeg`, and `.png` file in the folder.
+
+**What happens internally:**
+- Each image is sent to Gemini AI (`gemini /tumbledry:parse`) which reads the handwriting and returns structured CSV rows.
+- Rows are filtered and routed to **month-specific output files** based on the date in column 5.
+
+#### Output files
+
+The script writes CSV files into your **current working directory**:
+
+| File | Contents |
+|------|----------|
+| `Delivery_notes_January.csv` | All entries dated in January |
+| `Delivery_notes_February.csv` | All entries dated in February |
+| … | *(one file per month)* |
+| `Delivery_notes_Unsorted.csv` | Rows where the date could not be parsed |
+
+> **Tip:** Run the script from a consistent output folder (e.g., `data/notepad_csvs/`) so files don't scatter across the workspace.
+
+#### Sample output
+
+```
+Parsing: /photos/notepad_nov_01.jpg
+   -> Parsed Date: 01/11/2025 | Routing to: Delivery_notes_November.csv
+Parsing: /photos/notepad_nov_02.jpg
+   -> Parsed Date: 02/11/2025 | Routing to: Delivery_notes_November.csv
+-----------------------------------
+Processing complete!
+✅ Successfully parsed 2 out of 2 files.
+```
+
+---
+
+### Step 2 — Verify the CSV Before Importing
+
+Open the generated CSV and sanity-check a few rows before uploading:
+
+- **Column 5** should contain recognizable dates (`DD/MM/YYYY` format).
+- Order numbers, customer names, and amounts should look reasonable.
+- Check `Delivery_notes_Unsorted.csv` — if it's non-empty, those rows need manual review and correction before import.
+
+---
+
+### Step 3 — Import into the App (UI Step 5)
+
+1. Launch the Streamlit UI:
+   ```bash
+   streamlit run src/ui/app.py --server.address localhost
+   ```
+2. In the **Import Wizard**, complete **Steps 1–4** first (CRM Sales → Orders → Delivery → MSWIPE).
+3. On **Step 5 — Runner Notepad**, choose **"Upload File"** mode.
+4. Upload the monthly CSV (e.g., `Delivery_notes_November.csv`).
+5. Review the preview table, then click **Import**.
+
+> **Note:** The app natively accepts `.csv`, `.xlsx`, and `.xls` — no conversion needed. Use the **Manual Entry** tab in Step 5 as an alternative for small datasets.
+
+---
+
+### Troubleshooting
+
+| Problem | Likely Cause | Fix |
+|---------|-------------|-----|
+| `ERROR: Parsing failed or no valid data found` | Blurry/skewed photo, or Gemini CLI not authenticated | Re-shoot the photo clearer; run `gemini auth login` |
+| File appears in `Delivery_notes_Unsorted.csv` | Date column (col 5) is missing or in unexpected format | Manually correct the date in the CSV and re-route to the correct monthly file |
+| Duplicate rows after re-running | Script **appends** to existing CSVs | Delete or archive old CSV files before re-running the script on the same images |
+| `gemini: command not found` | Gemini CLI not installed or not on PATH | Install via `npm install -g @google/gemini-cli` and restart terminal |
+| Script won't run (`Permission denied`) | File not executable | Run `chmod +x scripts/parse_batch.sh` |
+
+---
 
 ### Typical Workflow
 
