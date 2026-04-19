@@ -35,6 +35,7 @@ from src.importers.crm_orders import CRMOrdersImporter
 from src.importers.mswipe import MSwipeImporter
 from src.importers.cash_register import CashRegisterImporter
 from src.importers.notepad import NotepadImporter
+from src.importers.expenses import ExpensesImporter
 from src.services.matching import MatchingService
 from src.services.reconciliation import ReconciliationService
 from src.exporters.excel_exporter import ExcelExporter
@@ -43,6 +44,7 @@ from src.models.exceptions import OrderException
 from src.models.orders import Order
 from src.models.payments import PaymentEvent
 from src.models.deliveries import DeliveryEvent
+from src.models.expenses import Expense
 from src.exceptions import LaundryReconcilerError
 
 logger = logging.getLogger(__name__)
@@ -50,6 +52,78 @@ logger = logging.getLogger(__name__)
 DB_PATH = "laundry_reconciler.db"
 MAX_UPLOAD_MB = 50
 ALLOWED_TYPES = ['csv', 'xlsx', 'xls']
+
+# ── Exception Descriptions (shown as tooltips in the UI) ──
+EXCEPTION_DESCRIPTIONS = {
+    'DeliveredNotMarkedCRM': (
+        '📦 Delivery recorded in Runner Notepad but no matching Delivery Event found in CRM. '
+        'The order was physically delivered but CRM was not updated.'
+    ),
+    'DeliveredMissingNotepad': (
+        '📋 CRM has a Delivery Event for this order, but the Runner Notepad has no entry. '
+        'Either the runner forgot to note it, or the delivery did not happen as recorded.'
+    ),
+    'CreditPolicyViolation': (
+        '💳 Order was delivered (per Notepad) but the outstanding balance exceeds the credit tolerance. '
+        'Customer has not fully paid at the time of delivery.'
+    ),
+    'NotepadAmountMismatch': (
+        '⚖️ The cash amount in the Runner Notepad differs from the CRM payment amount beyond tolerance. '
+        'CRM is the authoritative source — the notepad entry may have an error.'
+    ),
+    'GPayMismatch': (
+        '💳 Day-level: Total GPay recorded in CRM does not match the MSWIPE terminal total for the day. '
+        'High severity if variance exceeds ₹100.'
+    ),
+    'CashVariance': (
+        '💵 Day-level: Total cash collected per Runner Notepad does not match the Cash Register derived amount. '
+        'Could indicate missing deposits or notepad errors.'
+    ),
+    'LatePayment': (
+        '🕐 A CRM payment was recorded after the delivery date, beyond the allowed threshold days. '
+        'Indicates payment was collected or entered late.'
+    ),
+    'CashUndeposited': (
+        '🚨 Day-level: CRM shows cash received for the day, but the Cash Register has no matching deposit. '
+        'Independent of the Notepad — fires even if the runner skipped the notepad entry. '
+        'Potential indicator of pocketing/fraud.'
+    ),
+    'NotepadPaymentNotInCRM': (
+        '📝 Runner Notepad records a payment for an order, but CRM has no payment at all for that order. '
+        'CRM is out of sync — staff may have forgotten to record the collection.'
+    ),
+    'GPayOrderMismatch': (
+        '💳 CRM records a GPay payment for a specific order, but no MSWIPE transaction is linked to it. '
+        'The GPay receipt may be on a different order number in MSWIPE, or missing entirely.'
+    ),
+    'CashOrderNoRegister': (
+        '💵 CRM records a Cash payment for a specific order on a date where the Cash Register has no entry at all. '
+        'Either the register was not imported for that date, or the cash was never deposited.'
+    ),
+    'PaymentNotConfirmedByNotepad': (
+        '📋 CRM records an Online/Paytm/Package/Card payment, but the Runner Notepad has no corresponding entry. '
+        'Low severity — the runner may have simply omitted the note.'
+    ),
+    'AgeingOrder': (
+        '⏰ Order was placed more than the configured ageing threshold days ago with no delivery recorded from any source. '
+        'Outstanding balance still exists — needs follow-up.'
+    ),
+    'BackdatedGPayPayment': (
+        '🕵️ CRM records a GPay payment on run_date, but no same-day MSWIPE match exists. '
+        'A MSWIPE transaction of the same amount was found on an earlier date — payment was likely '
+        'received earlier but CRM was entered late.'
+    ),
+    'SuspectedBackdatedCashPayment': (
+        '🕵️ Cash deficit on run_date (Notepad > Register) correlates with a cash surplus on an earlier date '
+        '(Register > Notepad). Payment likely collected earlier but recorded in the notepad late.'
+    ),
+    'SuspectedBackdatedCRMEntry': (
+        '🕵️ CRM records cash received on run_date, but the Cash Register on that date is short. '
+        'An earlier date\'s register has an unexplained surplus of a matching amount — '
+        'cash was likely collected then, but CRM was only updated on run_date. '
+        'Probable honest late entry (not pocketing) — verify and correct CRM date.'
+    ),
+}
 
 def preview_uploaded_file(uploaded_file):
     """
@@ -144,6 +218,7 @@ def init_import_state():
             'mswipe': {'done': False, 'result': None},
             'notepad': {'done': False, 'result': None},
             'cash_register': {'done': False, 'result': None},
+            'expenses': {'done': False, 'result': None},
         }
 
 
@@ -665,6 +740,13 @@ def page_import(session_db):
     # Step 6: Cash Register
     render_cash_register_step(session_db, is_unlocked=sales_done)
 
+    # Step 7: Expenses
+    render_import_step(
+        7, "Expenses",
+        "Business expenses (cash & online). Cash expenses adjust the cash register variance to avoid false fraud alerts.",
+        'expenses', ExpensesImporter, session_db, is_unlocked=sales_done
+    )
+
 
 # ── Page: Run Reconciliation ──────────────────────────────
 
@@ -873,18 +955,33 @@ def _render_period_summary(session_db, view_mode: str):
     
     st.write("")
     
-    c4, c5, c6 = st.columns(3)
+    c4, c5, c6, c7 = st.columns(4)
     c4.metric("🔄 Self-Correcting", summary.get('self_correcting_pairs', 0),
               help="Day-level cash/GPay variances that canceled each other out within this period")
     c5.metric("⏰ Ageing", summary.get('ageing_order_count', 0), help="Orders older than the threshold missing a delivery confirmation")
     c6.metric("🕵️ Backdated", summary.get('backdated_count', 0), help="Payments matched to historical discrepancies or delayed MSWIPE sweeps")
+    c7.metric("💸 Cash Expenses", f"₹{summary.get('total_cash_expenses', 0):,.0f}",
+              help="Total cash expenses for the period — these are added back to register totals when calculating variances")
 
     st.divider()
 
     # ── Payment variance netting ───────────────────────────
-    col_gpay, col_cash = st.columns(2)
+    st.subheader("💰 Period-Level Cash & GPay Variance")
+    st.caption(
+        "These aggregates are the most reliable fraud-detection view. "
+        "Daily signals (like *SuspectedBackdatedCRMEntry*) can have false correlations — "
+        "a register surplus on Day A might belong to a different order. "
+        "But over the full period, every order's CRM payment and register deposit are both counted: "
+        "if cash was legitimately deposited, the two sides cancel. "
+        "**Only genuinely undeposited cash survives as a net residual in the CRM vs Register column.**"
+    )
+
+    st.write("")
+
+    col_gpay, col_notepad_cash, col_crm_cash = st.columns(3)
+
     with col_gpay:
-        st.subheader("💳 GPay Net Variance")
+        st.subheader("💳 GPay")
         net_g = summary.get('net_gpay_variance', 0)
         st.metric("CRM GPay Total",  f"₹{summary.get('crm_gpay_total', 0):,.0f}")
         st.metric("MSWIPE Total",    f"₹{summary.get('mswipe_total', 0):,.0f}")
@@ -892,15 +989,14 @@ def _render_period_summary(session_db, view_mode: str):
         st.metric("Net Variance", f"₹{net_g:,.0f}", delta=f"₹{net_g:,.0f}",
                   delta_color=color)
         if abs(net_g) <= 10:
-            st.success("✅ GPay balances within tolerance for this period.")
+            st.success("✅ GPay within tolerance.")
         else:
-            st.error(f"⚠️ GPay net variance of ₹{net_g:,.0f} persists for the period.")
+            st.error(f"⚠️ Persistent GPay variance of ₹{net_g:,.0f}")
 
-        # Drill-down: GPay contributing exceptions
         gpay_drill = [ex for ex in summary.get('persistent_exceptions', [])
                       if ex.get('type') in ('GPayMismatch', 'GPayOrderMismatch', 'BackdatedGPayPayment')]
         if gpay_drill:
-            with st.expander(f"🔍 View {len(gpay_drill)} contributing GPay exceptions", expanded=False):
+            with st.expander(f"🔍 {len(gpay_drill)} contributing exceptions", expanded=False):
                 gp_rows = []
                 for ex in gpay_drill:
                     ev = ex.get('evidence', {})
@@ -914,24 +1010,28 @@ def _render_period_summary(session_db, view_mode: str):
                     })
                 st.dataframe(pd.DataFrame(gp_rows), width='stretch', hide_index=True)
 
-    with col_cash:
-        st.subheader("💵 Cash Net Variance")
+    with col_notepad_cash:
+        st.subheader("📋 Notepad vs Register")
+        st.caption("Classic daily variance — runner notepad total vs cash register.")
         net_c = summary.get('net_cash_variance', 0)
-        st.metric("Notepad Cash Total",   f"₹{summary.get('notepad_cash_total', 0):,.0f}")
-        st.metric("Register Cash Total",  f"₹{summary.get('register_cash_total', 0):,.0f}")
+        st.metric("Notepad Cash Total",  f"₹{summary.get('notepad_cash_total', 0):,.0f}")
+        col_nc1, col_nc2 = st.columns(2)
+        col_nc1.metric("Register Total", f"₹{summary.get('register_cash_total', 0):,.0f}")
+        col_nc2.metric("Cash Expenses", f"₹{summary.get('total_cash_expenses', 0):,.0f}")
         color = "normal" if abs(net_c) <= 100 else "inverse"
         st.metric("Net Variance", f"₹{net_c:,.0f}", delta=f"₹{net_c:,.0f}",
                   delta_color=color)
         if abs(net_c) <= 100:
-            st.success("✅ Cash balances within tolerance for this period.")
+            st.success("✅ Notepad/Register within tolerance.")
         else:
-            st.error(f"⚠️ Cash net variance of ₹{net_c:,.0f} persists for the period.")
+            st.error(f"⚠️ Persistent variance of ₹{net_c:,.0f}")
 
-        # Drill-down: Cash contributing exceptions
         cash_drill = [ex for ex in summary.get('persistent_exceptions', [])
-                      if ex.get('type') in ('CashVariance', 'CashOrderNoRegister', 'SuspectedBackdatedCashPayment')]
+                      if ex.get('type') in (
+                          'CashVariance', 'CashOrderNoRegister',
+                          'SuspectedBackdatedCashPayment')]
         if cash_drill:
-            with st.expander(f"🔍 View {len(cash_drill)} contributing Cash exceptions", expanded=False):
+            with st.expander(f"🔍 {len(cash_drill)} contributing exceptions", expanded=False):
                 cr_rows = []
                 for ex in cash_drill:
                     ev = ex.get('evidence', {})
@@ -945,7 +1045,134 @@ def _render_period_summary(session_db, view_mode: str):
                     })
                 st.dataframe(pd.DataFrame(cr_rows), width='stretch', hide_index=True)
 
+    with col_crm_cash:
+        st.subheader("🚨 CRM vs Register")
+        st.caption(
+            "**Fraud detection view.** Compares what CRM says was collected in cash "
+            "against what was actually deposited in the register over the full period. "
+            "Daily false-positives cancel out here — only genuinely undeposited cash remains."
+        )
+        net_crm = summary.get('net_crm_vs_register_variance', 0)
+        st.metric("CRM Cash Total",      f"₹{summary.get('crm_cash_total', 0):,.0f}")
+        col_crm1, col_crm2 = st.columns(2)
+        col_crm1.metric("Register Total", f"₹{summary.get('register_cash_total', 0):,.0f}")
+        col_crm2.metric("Cash Expenses", f"₹{summary.get('total_cash_expenses', 0):,.0f}")
+        tol = 100  # same as cash_variance_tolerance default
+        color = "normal" if abs(net_crm) <= tol else "inverse"
+        st.metric("Net Undeposited", f"₹{net_crm:,.0f}", delta=f"₹{net_crm:,.0f}",
+                  delta_color=color)
+        if abs(net_crm) <= tol:
+            st.success("✅ All CRM cash accounted for in register.")
+        elif net_crm > tol:
+            st.error(
+                f"🚨 ₹{net_crm:,.0f} collected per CRM was **never deposited** in the register "
+                f"over this period. Investigate for pocketing."
+            )
+        else:
+            st.warning(
+                f"Register shows ₹{abs(net_crm):,.0f} more than CRM recorded — "
+                f"possible cash deposited but not yet entered in CRM."
+            )
+
+        fraud_drill = [ex for ex in summary.get('persistent_exceptions', [])
+                       if ex.get('type') in (
+                           'CashUndeposited', 'SuspectedBackdatedCRMEntry')]
+        if fraud_drill:
+            with st.expander(f"🔍 {len(fraud_drill)} contributing exceptions", expanded=False):
+                # ── Summary table ──────────────────────────────────
+                fd_rows = []
+                for ex in fraud_drill:
+                    ev = ex.get('evidence', {})
+                    fd_rows.append({
+                        'Date': ex.get('run_date', '—'),
+                        'Type': ex.get('type', '—'),
+                        'CRM Cash': f"₹{ev.get('crm_cash_total', ev.get('crm_cash_amount', 0)):,.0f}",
+                        'Register': f"₹{ev.get('register_cash_total', ev.get('register_on_crm_date', 0)):,.0f}",
+                        'Gap': f"₹{ev.get('undeposited_amount', ev.get('crm_deficit', 0)):,.0f}",
+                    })
+                st.dataframe(pd.DataFrame(fd_rows), width='stretch', hide_index=True)
+
+                st.divider()
+
+                # ── Order-level breakdown per CashUndeposited date ──
+                cash_undeposited = [ex for ex in fraud_drill if ex.get('type') == 'CashUndeposited']
+                if cash_undeposited:
+                    st.markdown("**🔎 Orders with CRM Cash payments on each flagged date:**")
+                    st.caption(
+                        "These are the orders that had cash marked received in CRM on the "
+                        "date of the exception. One or more of these orders may have had their "
+                        "cash pocketed rather than deposited. Cross-check with staff."
+                    )
+                    for ex in cash_undeposited:
+                        ev = ex.get('evidence', {})
+                        ex_date_str = ev.get('date', ex.get('run_date', ''))
+                        gap = ev.get('undeposited_amount', 0)
+
+                        try:
+                            from datetime import date as _date
+                            ex_date = _date.fromisoformat(str(ex_date_str))
+                        except Exception:
+                            ex_date = None
+
+                        with st.expander(
+                            f"📅 {ex_date_str} — ₹{gap:,.0f} undeposited — "
+                            f"probable orders below",
+                            expanded=True
+                        ):
+                            if ex_date is None:
+                                st.warning("Could not parse exception date.")
+                                continue
+
+                            # Query all CRM cash payments on this date
+                            crm_cash_on_date = session_db.query(PaymentEvent).filter(
+                                PaymentEvent.source == 'crm',
+                                PaymentEvent.payment_mode == 'Cash',
+                                PaymentEvent.payment_date == ex_date,
+                            ).all()
+
+                            if not crm_cash_on_date:
+                                st.info("No CRM cash payments found on this date.")
+                                continue
+
+                            order_rows = []
+                            for p in crm_cash_on_date:
+                                order = session_db.get(Order, p.order_id) if p.order_id else None
+                                total_paid = sum(float(pp.amount) for pp in order.payments) if order else 0
+                                balance = (float(order.order_amount) - total_paid) if order else 0
+                                order_rows.append({
+                                    'Order #': order.order_number if order else '—',
+                                    'Customer': (order.customer_name or '—') if order else '—',
+                                    'CRM Cash (this day)': f"₹{float(p.amount):,.0f}",
+                                    'Order Total': f"₹{float(order.order_amount):,.0f}" if order else '—',
+                                    'Total Paid': f"₹{total_paid:,.0f}",
+                                    'Balance Due': f"₹{balance:,.0f}",
+                                })
+
+                            st.dataframe(pd.DataFrame(order_rows), width='stretch', hide_index=True)
+                            st.caption(
+                                f"Total CRM cash on {ex_date_str}: "
+                                f"₹{sum(float(p.amount) for p in crm_cash_on_date):,.0f} across "
+                                f"{len(crm_cash_on_date)} payment(s). "
+                                f"Register gap: ₹{gap:,.0f}. "
+                                "Investigate which order(s) did not have their cash deposited."
+                            )
+
+                # ── SuspectedBackdatedCRMEntry hint ────────────────
+                backdated_crm = [ex for ex in fraud_drill if ex.get('type') == 'SuspectedBackdatedCRMEntry']
+                if backdated_crm:
+                    st.markdown("**🕵️ SuspectedBackdatedCRMEntry — cross-reference dates:**")
+                    for ex in backdated_crm:
+                        ev = ex.get('evidence', {})
+                        st.info(
+                            f"CRM date: **{ev.get('crm_recorded_date', '—')}** · "
+                            f"Suspected actual collection: **{ev.get('suspected_collection_date', '—')}** · "
+                            f"Register surplus on collection date: ₹{ev.get('register_surplus_on_that_date', 0):,.0f} · "
+                            f"CRM deficit: ₹{ev.get('crm_deficit', 0):,.0f}  \n"
+                            "If confirmed, correct the CRM payment date to the suspected collection date."
+                        )
+
     st.divider()
+
 
     # ── Persistent exceptions table ────────────────────────
     persistent = summary.get('persistent_exceptions', [])
@@ -1286,8 +1513,22 @@ def page_results(session_db):
                     })
 
             if ex_data:
+                # ── Exception legend ──────────────────────────────────
+                with st.expander("📖 Exception Rule Reference", expanded=False):
+                    st.caption("What each exception type means and which rule triggered it:")
+                    present_types = sorted(set(d['Type'] for d in ex_data))
+                    for exc_type in present_types:
+                        desc = EXCEPTION_DESCRIPTIONS.get(exc_type, 'No description available.')
+                        st.markdown(f"**`{exc_type}`** — {desc}")
+
+                # ── Add Rule Description column to table ──────────────
+                for row in ex_data:
+                    short_desc = EXCEPTION_DESCRIPTIONS.get(row['Type'], '')
+                    # Truncate to first sentence for table readability
+                    row['Rule'] = short_desc.split('.')[0] + '.' if short_desc else '—'
+
                 st.dataframe(pd.DataFrame(ex_data), width='stretch', hide_index=True)
-                st.caption(f"Showing {len(ex_data)} of {len(exceptions)} exceptions")
+                st.caption(f"Showing {len(ex_data)} of {len(exceptions)} exceptions · Expand **Exception Rule Reference** above for full descriptions")
             else:
                 st.info("No exceptions match the selected filters.")
 

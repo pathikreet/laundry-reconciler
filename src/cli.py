@@ -13,6 +13,7 @@ from src.importers.crm_orders import CRMOrdersImporter
 from src.importers.mswipe import MSwipeImporter
 from src.importers.cash_register import CashRegisterImporter
 from src.importers.notepad import NotepadImporter
+from src.importers.expenses import ExpensesImporter
 from src.services.matching import MatchingService
 from src.services.reconciliation import ReconciliationService
 from src.exporters.excel_exporter import ExcelExporter
@@ -37,6 +38,7 @@ ALLOWED_EXTENSIONS = {
     'mswipe': {'.csv', '.xlsx', '.xls'},
     'notepad': {'.csv', '.xlsx', '.xls'},
     'cash_register': {'.xlsx', '.xls'},
+    'expenses': {'.csv', '.xlsx', '.xls'},
 }
 
 MAX_FILE_SIZE_MB = 50
@@ -166,6 +168,15 @@ def import_cash_register(args, session):
 
 
 @_run_with_session
+def import_expenses(args, session):
+    path = validate_file_path(args.file, 'expenses')
+    importer = ExpensesImporter(session)
+    result = importer.run(path)
+    print(f"Imported Expenses data from {path}")
+    print(f"  Entries: {result.get('imported', 'N/A')}, Errors: {result.get('errors', 0)}")
+
+
+@_run_with_session
 def run_reconciliation(args, session):
     try:
         run_date = parse(args.date).date()
@@ -231,6 +242,11 @@ def main():
     p_cr.add_argument('file', help='Path to Cash Register Excel file')
     p_cr.add_argument('--year', type=int, default=date.today().year, help='Year of the cash register sheet')
     p_cr.set_defaults(func=import_cash_register)
+
+    # Import Expenses
+    p_exp = subparsers.add_parser('import-expenses', help='Import Expenses data')
+    p_exp.add_argument('file', help='Path to Expenses Excel/CSV file')
+    p_exp.set_defaults(func=import_expenses)
 
     # Run Reconciliation
     p_run = subparsers.add_parser('reconcile', help='Run reconciliation for a date')

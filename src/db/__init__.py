@@ -7,3 +7,4 @@ from src.models.exceptions import OrderException
 from src.models.audit import AuditLog
 from src.models.config import ColumnMapping, ToleranceConfig
 from src.models.cash_register import CashRegisterEntry
+from src.models.expenses import Expense

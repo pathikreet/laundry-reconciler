@@ -33,6 +33,7 @@ The reconciliation engine automatically flags discrepancies across the imported 
 | **GPayMismatch** | 🔴 High / 🟡 Medium | Total GPay amount recorded in CRM for the day differs from MSWIPE total by more than `GPAY_TOLERANCE_INR` (default: ₹10.00). *High severity if variance > ₹100.* | Investigate GPay day-total discrepancy. |
 | **CashVariance** | 🔴 High | Total Cash recorded in Notepad for the day differs from the derived cash in the Cash Register by more than `CASH_VARIANCE_TOLERANCE_INR` (default: ₹100.00). | Check cash register for missing deposits/expenses. |
 | **LatePayment** | 🟡 Medium | A payment is received after the delivery date by more than `LATE_PAYMENT_THRESHOLD_DAYS` (default: 0 days). | Review late payment receipt. |
+| **CashUndeposited** | 🔴 High | Total cash marked as received in CRM for the day exceeds the amount recorded in the Cash Register by more than `CASH_VARIANCE_TOLERANCE_INR` (default: ₹100). *Fires independently of the Notepad — catches pocketing even when the runner also skips the notepad entry.* | Investigate whether the cash was deposited. Cross-check CRM cash payments against register entries for the day. |
 
 ---
 

@@ -9,6 +9,7 @@ from src.models.deliveries import DeliveryEvent
 from src.models.reconciliation import ReconciliationRun
 from src.models.exceptions import OrderException
 from src.models.cash_register import CashRegisterEntry
+from src.models.expenses import Expense
 from src.config.settings import Settings
 from src.exceptions import ReconciliationError
 
@@ -757,6 +758,82 @@ class ReconciliationService:
                         )
                         break  # Only flag best correlation candidate
 
+        # ── CRM cash vs Register cross-day correlation ─────────
+        # Scenario: cash collected on Day A (register has surplus), but staff
+        # only marks CRM on Day B (run_date). Register on Day B looks light
+        # vs CRM, but the money IS in the register — just on a different date.
+        # Distinguishes honest late CRM entry from actual pocketing (CashUndeposited).
+        crm_cash_today = float(
+            self.db.query(func.sum(PaymentEvent.amount)).filter(
+                PaymentEvent.source == 'crm',
+                PaymentEvent.payment_mode == 'Cash',
+                PaymentEvent.payment_date == run_date,
+            ).scalar() or 0.0
+        )
+
+        if crm_cash_today > 0:
+            register_today_crm = self.db.query(CashRegisterEntry).filter(
+                CashRegisterEntry.entry_date == run_date
+            ).first()
+            register_today_crm_val = float(
+                register_today_crm.derived_cash_from_orders or 0.0
+            ) if register_today_crm else 0.0
+
+            crm_deficit = crm_cash_today - register_today_crm_val  # positive = CRM > register
+
+            if crm_deficit > self.cash_variance_tolerance:
+                # Search historical register entries for a surplus >= the CRM deficit
+                # (surplus can be larger — the register may have collected this order's
+                # cash along with other cash from other orders on the same day)
+                hist_entries = self.db.query(CashRegisterEntry).filter(
+                    CashRegisterEntry.entry_date >= lookback_start,
+                    CashRegisterEntry.entry_date < run_date,
+                ).all()
+
+                for hist in hist_entries:
+                    # Surplus = register on hist date minus what notepad expected
+                    hist_notepad = float(
+                        self.db.query(func.sum(PaymentEvent.amount)).filter(
+                            PaymentEvent.source == 'notepad',
+                            PaymentEvent.payment_mode == 'Cash',
+                            PaymentEvent.payment_date == hist.entry_date,
+                        ).scalar() or 0.0
+                    )
+                    hist_reg = float(hist.derived_cash_from_orders or 0.0)
+                    hist_surplus = hist_reg - hist_notepad  # positive = register has extra
+
+                    if hist_surplus >= crm_deficit - self.cash_variance_tolerance:
+                        days_offset = (run_date - hist.entry_date).days
+                        self._create_exception(
+                            run_id, None, 'medium', 'SuspectedBackdatedCRMEntry',
+                            tags=['BackdatedPayment', 'CRMVsRegisterCorrelation'],
+                            evidence={
+                                'crm_recorded_date': str(run_date),
+                                'crm_cash_amount': round(crm_cash_today, 2),
+                                'register_on_crm_date': round(register_today_crm_val, 2),
+                                'crm_deficit': round(crm_deficit, 2),
+                                'suspected_collection_date': str(hist.entry_date),
+                                'register_surplus_on_that_date': round(hist_surplus, 2),
+                                'days_offset': days_offset,
+                            },
+                            action=(
+                                f'CRM records ₹{crm_cash_today:.0f} cash received on {run_date}, '
+                                f'but register on that date only shows ₹{register_today_crm_val:.0f}. '
+                                f'Register on {hist.entry_date} has an unexplained surplus of '
+                                f'₹{hist_surplus:.0f} (same or more than the ₹{crm_deficit:.0f} deficit) — '
+                                f'cash was likely collected on {hist.entry_date} '
+                                f'but CRM was updated {days_offset} day(s) later. '
+                                f'Correct CRM payment date if confirmed, or escalate if cash cannot be traced.'
+                            )
+                        )
+                        count += 1
+                        logger.info(
+                            "SuspectedBackdatedCRMEntry: CRM ₹%.2f on %s, "
+                            "register surplus ₹%.2f found on %s (%d days earlier)",
+                            crm_cash_today, run_date, hist_surplus, hist.entry_date, days_offset
+                        )
+                        break  # Best correlation candidate only
+
         return count
 
     # ── Feature 5: Period Summary ─────────────────────────────
@@ -807,6 +884,14 @@ class ReconciliationService:
                 PaymentEvent.payment_date <= end_date,
             ).scalar() or 0.0
         )
+        crm_cash_total = float(
+            self.db.query(func.sum(PaymentEvent.amount)).filter(
+                PaymentEvent.source == 'crm',
+                PaymentEvent.payment_mode == 'Cash',
+                PaymentEvent.payment_date >= start_date,
+                PaymentEvent.payment_date <= end_date,
+            ).scalar() or 0.0
+        )
         register_cash_total = float(
             self.db.query(
                 func.sum(CashRegisterEntry.derived_cash_from_orders)
@@ -816,8 +901,26 @@ class ReconciliationService:
             ).scalar() or 0.0
         )
 
+        # ── Expense totals for the period ──────────────────────
+        total_cash_expenses = float(
+            self.db.query(func.sum(Expense.amount)).filter(
+                Expense.expense_date >= start_date,
+                Expense.expense_date <= end_date,
+                Expense.mode == 'Cash',
+            ).scalar() or 0.0
+        )
+        total_online_expenses = float(
+            self.db.query(func.sum(Expense.amount)).filter(
+                Expense.expense_date >= start_date,
+                Expense.expense_date <= end_date,
+                Expense.mode != 'Cash',
+            ).scalar() or 0.0
+        )
+        total_expenses = total_cash_expenses + total_online_expenses
+
         net_gpay_variance = round(crm_gpay_total - mswipe_total, 2)
-        net_cash_variance = round(notepad_cash_total - register_cash_total, 2)
+        net_cash_variance = round(notepad_cash_total - (register_cash_total + total_cash_expenses), 2)
+        net_crm_vs_register_variance = round(crm_cash_total - (register_cash_total + total_cash_expenses), 2)
 
         # ── Gather all exceptions for the period ──────────────
         runs = self.db.query(ReconciliationRun).filter(
@@ -894,10 +997,17 @@ class ReconciliationService:
             'crm_gpay_total': round(crm_gpay_total, 2),
             'mswipe_total': round(mswipe_total, 2),
             'net_gpay_variance': net_gpay_variance,
-            # Cash
+            # Cash (Notepad vs Register — classic daily variance)
             'notepad_cash_total': round(notepad_cash_total, 2),
             'register_cash_total': round(register_cash_total, 2),
             'net_cash_variance': net_cash_variance,
+            # Cash (CRM vs Register — undeposited cash / fraud detection)
+            'crm_cash_total': round(crm_cash_total, 2),
+            'net_crm_vs_register_variance': net_crm_vs_register_variance,
+            # Expenses
+            'total_cash_expenses': round(total_cash_expenses, 2),
+            'total_online_expenses': round(total_online_expenses, 2),
+            'total_expenses': round(total_expenses, 2),
             # Exception stats
             'total_exceptions': len(all_exceptions),
             'persistent_exceptions_count': len(persistent),
@@ -941,6 +1051,7 @@ class ReconciliationService:
         Rules:
         1. GPay day-total validation (CRM vs MSWIPE)
         2. Cash variance validation (Notepad vs Cash Register)
+        3. CRM cash vs Cash Register (undeposited cash / fraud detection)
 
         Returns:
             Count of exceptions created.
@@ -948,6 +1059,7 @@ class ReconciliationService:
         count = 0
         count += self._check_gpay_totals(run_date, run_id)
         count += self._check_cash_variance(run_date, run_id)
+        count += self._check_crm_cash_vs_register(run_date, run_id)
         return count
 
     def _check_gpay_totals(self, run_date: date, run_id: int) -> int:
@@ -989,6 +1101,7 @@ class ReconciliationService:
         Validate cash: expected cash (Notepad) vs derived cash (Cash Register).
 
         Uses configurable cash_variance_tolerance for the threshold.
+        Adjusts for legitimate cash expenses on the same date.
         """
         # Skip cash checks before cash register data was available
         cash_from = self.settings.cash_register_available_from
@@ -1007,7 +1120,18 @@ class ReconciliationService:
 
         if register_entry:
             derived_cash = float(register_entry.derived_cash_from_orders or 0.0)
-            cash_diff = derived_cash - float(expected_cash)
+
+            # Add back cash expenses: register closing is lower because of
+            # legitimate cash outflows, so derived_cash understates actual collections
+            cash_expenses = float(
+                self.db.query(func.sum(Expense.amount)).filter(
+                    Expense.expense_date == run_date,
+                    Expense.mode == 'Cash',
+                ).scalar() or 0.0
+            )
+            adjusted_derived = derived_cash + cash_expenses
+
+            cash_diff = adjusted_derived - float(expected_cash)
 
             if abs(cash_diff) > self.cash_variance_tolerance:
                 self._create_exception(
@@ -1016,11 +1140,96 @@ class ReconciliationService:
                     {
                         'expected': round(float(expected_cash), 2),
                         'derived': round(derived_cash, 2),
+                        'cash_expenses': round(cash_expenses, 2),
+                        'adjusted_derived': round(adjusted_derived, 2),
                         'diff': round(cash_diff, 2)
                     },
-                    'Check cash register'
+                    f'Check cash register. Register shows ₹{derived_cash:.0f} + '
+                    f'₹{cash_expenses:.0f} expenses = ₹{adjusted_derived:.0f} vs '
+                    f'₹{float(expected_cash):.0f} expected from notepad.'
                 )
                 return 1
+        return 0
+
+    # ── CRM Cash vs Register (Undeposited Cash Detection) ─────
+
+    def _check_crm_cash_vs_register(self, run_date: date, run_id: int) -> int:
+        """
+        Compare total CRM cash payments on run_date against the cash register.
+
+        This catches the scenario where cash is collected and recorded in CRM
+        but never deposited in the register — a potential fraud indicator.
+
+        Unlike CashVariance (Notepad vs Register), this check uses CRM as the
+        source of truth for what was collected, making it independent of whether
+        the runner entered the payment in the notepad. If both notepad and
+        register are silent but CRM shows cash received, this rule fires.
+
+        Adjusts for legitimate cash expenses on the same date.
+
+        Severity: high — undeposited cash is a critical discrepancy.
+        Exception type: CashUndeposited
+        """
+        cash_from = self.settings.cash_register_available_from
+        if cash_from and run_date < cash_from:
+            return 0
+
+        # Total cash marked received in CRM for this date
+        crm_cash = float(
+            self.db.query(func.sum(PaymentEvent.amount)).filter(
+                PaymentEvent.source == 'crm',
+                PaymentEvent.payment_mode == 'Cash',
+                PaymentEvent.payment_date == run_date,
+            ).scalar() or 0.0
+        )
+
+        if crm_cash == 0:
+            return 0  # No CRM cash on this day — nothing to check
+
+        register_entry = self.db.query(CashRegisterEntry).filter(
+            CashRegisterEntry.entry_date == run_date
+        ).first()
+
+        # If no register entry at all, treat deposited amount as zero.
+        register_cash = float(register_entry.derived_cash_from_orders or 0.0) if register_entry else 0.0
+
+        # Add back cash expenses: they reduce the register closing balance
+        # but represent legitimate outflows, not pocketed cash
+        cash_expenses = float(
+            self.db.query(func.sum(Expense.amount)).filter(
+                Expense.expense_date == run_date,
+                Expense.mode == 'Cash',
+            ).scalar() or 0.0
+        )
+        adjusted_register = register_cash + cash_expenses
+
+        undeposited = crm_cash - adjusted_register
+
+        if undeposited > self.cash_variance_tolerance:
+            self._create_exception(
+                run_id, None, 'high', 'CashUndeposited',
+                tags=['CashNotInRegister', 'PotentialFraud'],
+                evidence={
+                    'crm_cash_total': round(crm_cash, 2),
+                    'register_cash_total': round(register_cash, 2),
+                    'cash_expenses': round(cash_expenses, 2),
+                    'adjusted_register': round(adjusted_register, 2),
+                    'undeposited_amount': round(undeposited, 2),
+                    'date': str(run_date),
+                },
+                action=(
+                    f'₹{undeposited:.0f} collected as cash per CRM but not reflected '
+                    f'in cash register on {run_date} (register ₹{register_cash:.0f} '
+                    f'+ expenses ₹{cash_expenses:.0f} = ₹{adjusted_register:.0f}). '
+                    f'Verify cash was deposited or investigate for missing deposit.'
+                )
+            )
+            logger.info(
+                "CashUndeposited: ₹%.2f CRM cash vs ₹%.2f register + ₹%.2f expenses on %s (gap=₹%.2f)",
+                crm_cash, register_cash, cash_expenses, run_date, undeposited
+            )
+            return 1
+
         return 0
 
     # ── Helpers ────────────────────────────────────────────────
