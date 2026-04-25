@@ -456,14 +456,37 @@ def render_notepad_step(session_db, is_unlocked):
     with tab_manual:
         st.caption("Enter each order's delivery details. Click **Add Order Details** for more rows.")
 
+        def add_notepad_entry():
+            order_num = st.session_state.get('np_order', '')
+            if not order_num:
+                st.error("Please enter an Order Number")
+            else:
+                customer = st.session_state.get('np_customer', '')
+                st.session_state.notepad_entries.append({
+                    'delivery_date': st.session_state.get('np_date', date.today()),
+                    'customer_name': customer,
+                    'order_number': order_num,
+                    'amount_collected': st.session_state.get('np_amount', 0.0),
+                    'payment_mode': st.session_state.get('np_mode', 'Cash'),
+                    'runner_name': st.session_state.get('np_runner', ''),
+                    'notes': st.session_state.get('np_notes', ''),
+                })
+                st.toast(f"✅ Added entry for {customer or order_num}")
+                # Clear fields programmatically for the next entry
+                st.session_state['np_order'] = ''
+                st.session_state['np_customer'] = ''
+                st.session_state['np_amount'] = 0.0
+                st.session_state['np_runner'] = ''
+                st.session_state['np_notes'] = ''
+
         # ── Add new entry form ──
         with st.expander("➕ Add Order Details", expanded=len(st.session_state.notepad_entries) == 0):
             col1, col2 = st.columns(2)
             with col1:
                 entry_date = st.date_input("Delivery Date", value=date.today(), key="np_date")
                 entry_customer = st.text_input("Customer Name (optional)", key="np_customer")
-                entry_order = st.text_input("Order Number", key="np_order",
-                                           placeholder="e.g. T697")
+                entry_order = st.text_input("Order Number *", key="np_order",
+                                           placeholder="e.g. T697", help="Required field")
                 entry_runner = st.text_input("Runner Name", key="np_runner")
             with col2:
                 entry_amount = st.number_input("Amount Collected (₹)", min_value=0.0,
@@ -474,21 +497,7 @@ def render_notepad_step(session_db, is_unlocked):
                 entry_notes = st.text_area("Notes (optional)", key="np_notes",
                                           placeholder="Any remarks...", height=68)
 
-            if st.button("➕ Add Order Details", key="btn_add_notepad", type="primary"):
-                if not entry_order:
-                    st.error("Please enter an Order Number")
-                else:
-                    st.session_state.notepad_entries.append({
-                        'delivery_date': entry_date,
-                        'customer_name': entry_customer,
-                        'order_number': entry_order,
-                        'amount_collected': entry_amount,
-                        'payment_mode': entry_mode,
-                        'runner_name': entry_runner,
-                        'notes': entry_notes,
-                    })
-                    st.success(f"Added entry for {entry_customer or entry_order}")
-                    st.rerun()
+            st.button("➕ Add Order Details", key="btn_add_notepad", type="primary", on_click=add_notepad_entry)
 
         # ── Show queued entries ──
         entries = st.session_state.notepad_entries
@@ -1550,7 +1559,7 @@ def page_results(session_db):
                         ex_obj.resolution_note = note
                         ex_obj.resolved_at = datetime.utcnow()
                         session_db.commit()
-                        st.success(f"Exception {sel_id} marked as '{resolution}'")
+                        st.toast(f"✅ Exception {sel_id} marked as '{resolution}'")
                         st.rerun()
         else:
             st.success("🎉 No exceptions found for this run!")
@@ -2134,7 +2143,7 @@ def page_order_lookup(session_db):
                             e.resolution_note = note
                             e.resolved_at = datetime.utcnow()
                             session_db.commit()
-                            st.success(f"Exception {e.id} marked as '{resolution}'")
+                            st.toast(f"✅ Exception {e.id} marked as '{resolution}'")
                             st.rerun()
 
 
