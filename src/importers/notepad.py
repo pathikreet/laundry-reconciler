@@ -242,9 +242,32 @@ class NotepadImporter(BaseImporter):
             return 0.0
 
     def _normalize_mode(self, mode: str) -> str:
-        """Map notepad mode to a known mode using settings mapping."""
+        """Map notepad mode to a known mode using settings mapping or substring matching."""
         if not mode:
             return ''
+            
         m = mode.strip().lower()
-        return self.settings.payment_mode_mapping.get(m, mode)
+        
+        # Exact match first from the dictionary
+        mapped = self.settings.payment_mode_mapping.get(m)
+        if mapped:
+            return mapped
+            
+        # Substring fallback for common variations
+        if 'cash' in m:
+            return 'Cash'
+        if any(kw in m for kw in ['gpay', 'google pay', 'upi', 'phonepe']):
+            return 'GPay'
+        if 'paytm' in m:
+            return 'Paytm'
+        if any(kw in m for kw in ['online', 'bank', 'neft', 'imps', 'transfer']):
+            return 'Online'
+        if any(kw in m for kw in ['card', 'debit', 'credit', 'swipe']):
+            return 'Card'
+        if 'due' in m or 'pending' in m:
+            return 'Due'
+        if 'adv' in m:
+            return 'Advance'
+            
+        return mode
 

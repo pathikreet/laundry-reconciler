@@ -47,12 +47,17 @@ class ExpensesImporter(BaseImporter):
             if amount <= 0:
                 continue
 
+            # Category: 'Paid To' in the user's sheet holds the expense category
+            # (e.g. "Tea Expenses", "Salary", "petrol Expenses", "Chemical Expenses")
             category = str(
+                row.get('Paid To') or row.get('paid_to') or
                 row.get('Category') or row.get('category') or
                 row.get('Type') or row.get('type') or ''
             ).strip() or 'Misc'
 
+            # Description: 'Narration' in the user's sheet holds freetext details
             description = str(
+                row.get('Narration') or row.get('narration') or
                 row.get('Description') or row.get('description') or
                 row.get('Details') or row.get('details') or
                 row.get('Remarks') or row.get('remarks') or ''
@@ -73,10 +78,9 @@ class ExpensesImporter(BaseImporter):
                 mode = 'Card'
             # else keep as-is
 
-            paid_to = str(
-                row.get('Paid To') or row.get('paid_to') or
-                row.get('Vendor') or row.get('vendor') or ''
-            ).strip() or None
+            # Vendor: use 'Paid To' as paid_to only when a separate Category exists
+            # otherwise paid_to is derived from the category field
+            paid_to = category if category != 'Misc' else None
 
             normalized.append({
                 'expense_date': expense_date,

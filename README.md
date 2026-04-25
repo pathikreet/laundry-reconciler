@@ -2,21 +2,26 @@
 
 Automates daily reconciliation of laundry business sales and delivery data from CRM, MSWIPE, cash register, and runner notepad sources. Matches orders to payments, flags discrepancies (including late payments) as severity-classified exceptions, and exports Excel reconciliation reports.
 
+**Documentation Links:**
+- [System Architecture & LLD](docs/ARCHITECTURE.md)
+- [Detailed Features List](docs/FEATURES.md)
+
 ---
 
 ## Features
 
 - **CRM 3-report import** — Sales Report (payment transactions), Orders Report (authoritative amounts), Delivery Report (delivery dates)
 - **Multi-payment order aggregation** — Correctly handles orders with multiple payment rows (advance, delivery, post-delivery)
-- **Late payment detection** — Flags payments made after delivery with configurable threshold
-- **Smart matching** — Exact order-number matching + fuzzy matching (name, amount, date) with confidence scoring
-- **Guided import wizard** — Step-by-step Streamlit UI with progress tracking and data previews
-- **Manual notepad entry** — Web form to enter runner delivery data without needing Excel files
-- **Reconciliation rules** — Delivery status, payment accuracy, credit policy, GPay totals, cash variance, late payments
-- **Exception management** — Severity-classified exceptions with evidence, suggested actions, and resolution workflow
-- **Excel export** — 6-sheet workbook: Reconciled Orders, Exceptions, Unmatched Notepad, Unmatched MSWIPE, Daily Summary, Audit Log
-- **External config** — `.env` file support via pydantic-settings for all tolerances and mappings
-- **File validation** — Type whitelist, size limits (50 MB), and path traversal prevention on all imports
+- **Late payment & Fraud detection** — Flags payments made after delivery and cross-references register surpluses to detect hidden cash pocketing.
+- **Expenses Tracking** — Native integration of business expenses to cleanly offset counter cash variances without false alarms.
+- **Smart matching & Substring mapping** — Exact order-number matching + fuzzy matching (name, amount, date) + intelligent mode parsing (e.g., mapping "cash adv" to "Cash").
+- **Guided import wizard** — Step-by-step Streamlit UI with progress tracking, 7 stages of ingestion, and data previews.
+- **Manual notepad entry** — Web form to enter runner delivery data without needing Excel files.
+- **Reconciliation rules** — Delivery status, payment accuracy, credit policy, GPay totals, net cash variance (Notepad vs Register & CRM vs Register).
+- **Exception management** — Severity-classified exceptions with evidence, suggested actions, and period-level "Self-Correcting" netting.
+- **Excel export** — 6-sheet workbook: Reconciled Orders, Exceptions, Unmatched Notepad, Unmatched MSWIPE, Daily Summary, Audit Log.
+- **External config** — `.env` file support via pydantic-settings for all tolerances and mappings.
+- **File validation** — Type whitelist, size limits (50 MB), and path traversal prevention on all imports.
 
 ---
 
@@ -31,9 +36,13 @@ The reconciliation engine automatically flags discrepancies across the imported 
 | **CreditPolicyViolation** | 🔴 High | Order is delivered, but the outstanding balance exceeds the configured `CREDIT_TOLERANCE_INR` (default: ₹1.00). | Collect pending payment from customer. |
 | **NotepadAmountMismatch** | 🟡 Medium | The amount collected according to the Notepad differs from the CRM payment by more than `AMOUNT_MATCH_TOLERANCE_INR` (default: ₹2.00). | Review notepad entry. CRM amount is treated as authoritative. |
 | **GPayMismatch** | 🔴 High / 🟡 Medium | Total GPay amount recorded in CRM for the day differs from MSWIPE total by more than `GPAY_TOLERANCE_INR` (default: ₹10.00). *High severity if variance > ₹100.* | Investigate GPay day-total discrepancy. |
-| **CashVariance** | 🔴 High | Total Cash recorded in Notepad for the day differs from the derived cash in the Cash Register by more than `CASH_VARIANCE_TOLERANCE_INR` (default: ₹100.00). | Check cash register for missing deposits/expenses. |
+| **CashVariance** | 🔴 High | Total Cash recorded in Notepad for the day differs from the derived cash in the Cash Register (offset by legal Cash Expenses) by more than `CASH_VARIANCE_TOLERANCE_INR` (default: ₹100.00). | Check cash register for missing deposits. |
 | **LatePayment** | 🟡 Medium | A payment is received after the delivery date by more than `LATE_PAYMENT_THRESHOLD_DAYS` (default: 0 days). | Review late payment receipt. |
-| **CashUndeposited** | 🔴 High | Total cash marked as received in CRM for the day exceeds the amount recorded in the Cash Register by more than `CASH_VARIANCE_TOLERANCE_INR` (default: ₹100). *Fires independently of the Notepad — catches pocketing even when the runner also skips the notepad entry.* | Investigate whether the cash was deposited. Cross-check CRM cash payments against register entries for the day. |
+| **CashUndeposited** | 🔴 High | Total cash marked as received in CRM for the day exceeds the amount recorded in the Cash Register (offset by legal Cash Expenses) by more than `CASH_VARIANCE_TOLERANCE_INR`. *Fires independently of the Notepad — catches pocketing even when the runner also skips the notepad entry.* | Investigate whether the cash was deposited. Cross-check CRM cash payments against register entries for the day. |
+| **BackdatedGPayPayment** | 🕵️ Informational | GPay entry in CRM doesn't match MSWIPE on the same day, but aligns exactly with an unlinked MSWIPE surplus on an earlier date. | Verify CRM was updated late. No missing funds. |
+| **SuspectedBackdatedCashPayment** | 🕵️ Informational | Cash deficit on run date (Notepad > Register) correlates with an unexplained cash surplus on an earlier date. | Verify notepad was updated late. No missing funds. |
+| **SuspectedBackdatedCRMEntry** | 🕵️ Informational | Cash received per CRM on run date, but Register is short. An earlier date's Register has an exact matching surplus. | Verify honest late CRM entry instead of fraud. |
+| **PaymentNotConfirmedByNotepad** | 🔵 Low | CRM marks an Online/Card/Paytm payment but notepad has no corresponding entry. | Runner likely omitted entry. Low risk. |
 
 ---
 
