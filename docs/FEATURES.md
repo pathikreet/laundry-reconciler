@@ -1,6 +1,6 @@
-# Features — Laundry Reconciler
+# Features — Digital Accountant
 
-The Laundry Reconciler is a comprehensive, local-first data integrity application built to automate the daily financial reconciliation of a laundry business. By ingesting disparate data sources (CRM, payment terminals, cash registers, and runner notepads), the system acts as a central truth engine, flagging discrepancies, missing funds, and policy violations.
+The Digital Accountant is a comprehensive, local-first data integrity application built to automate the daily financial reconciliation of a laundry business. By ingesting disparate data sources (CRM, payment terminals, cash registers, and runner notepads), the system acts as a central truth engine, flagging discrepancies, missing funds, and policy violations.
 
 ## Core Capabilities
 

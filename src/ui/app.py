@@ -1,5 +1,5 @@
 """
-Laundry Reconciler — Streamlit UI
+Digital Accountant — Streamlit UI
 
 Guided import wizard + reconciliation dashboard.
 Import order: CRM Sales → CRM Orders → CRM Delivery → MSWIPE → Notepad → Cash Register
@@ -2141,14 +2141,14 @@ def page_order_lookup(session_db):
 # ── Main App ──────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="Laundry Reconciler",
+    page_title="Digital Accountant",
     page_icon="🧺",
     layout="wide"
 )
 
 load_css()
 
-st.title("🧺 Laundry Reconciler")
+st.title("🧺 Digital Accountant")
 
 # Sidebar navigation
 st.sidebar.title("Navigation")

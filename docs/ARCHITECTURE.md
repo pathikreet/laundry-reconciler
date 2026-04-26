@@ -1,4 +1,4 @@
-# System Architecture — Laundry Reconciler MVP
+# System Architecture — Digital Accountant MVP
 
 ## 1. System Overview
 

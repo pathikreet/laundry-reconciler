@@ -1,4 +1,4 @@
-# Laundry Reconciler MVP
+# Digital Accountant
 
 Automates daily reconciliation of laundry business sales and delivery data from CRM, MSWIPE, cash register, and runner notepad sources. Matches orders to payments, flags discrepancies (including late payments) as severity-classified exceptions, and exports Excel reconciliation reports.
 
