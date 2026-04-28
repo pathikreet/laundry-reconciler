@@ -8,3 +8,4 @@ Collecting usage statistics. To deactivate, set browser.gatherUsageStats to fals
   Network URL: http://192.168.0.2:8501
   External URL: http://34.27.142.64:8501
 
+  Stopping...
