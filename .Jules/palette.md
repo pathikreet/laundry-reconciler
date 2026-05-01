@@ -13,3 +13,7 @@
 ## 2026-03-21 - Navigation Empty States and Streamlit Callbacks
 **Learning:** Empty states with "dead-end" warning messages create friction. Providing a direct Call-to-Action (CTA) button to the next logical step (e.g., navigating to a data generation page) significantly improves flow. However, in Streamlit, directly mutating a widget's session state (like a sidebar navigation radio) *after* it has been rendered causes a fatal `StreamlitAPIException`. Navigation must be handled via `on_click` callbacks attached to buttons, rather than inline state mutation followed by `st.rerun()`.
 **Action:** Replace dead-end warnings with `st.info` and a primary CTA button. Implement programmatic navigation using `on_click=navigate_to_callback` instead of setting `st.session_state` directly.
+
+## 2026-05-01 - Explicitly Marking Required Fields
+**Learning:** Streamlit forms lack native visual indicators for required fields, which causes frustration when users submit incomplete forms. Adding asterisks to labels isn't enough for accessibility; combining an asterisk in the label with a `help` parameter explicitly stating 'Required field' ensures both sighted and screen reader users understand the requirement before submission.
+**Action:** In Streamlit apps, explicitly mark required input fields using an asterisk (*) in the label and the `help="Required field"` parameter to improve accessibility and UX.
