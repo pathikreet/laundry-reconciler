@@ -1212,19 +1212,14 @@ def page_results(session_db):
                   on_click=navigate_to, args=("Run Reconciliation",))
         return
 
-    # View mode selector
+    # View mode selector — simplified to 2 modes
     view_mode = st.radio(
         "View Mode",
-        ["📅 Single Run", "📆 Date Range", "📊 Monthly", "📊 Quarterly"],
+        ["📅 Single Day", "📆 Date Range"],
         horizontal=True, key="results_view_mode"
     )
 
-    # ── Period Summary Views (Monthly / Quarterly) ────────
-    if view_mode in ("📊 Monthly", "📊 Quarterly"):
-        _render_period_summary(session_db, view_mode)
-        return
-
-    if view_mode == "📅 Single Run":
+    if view_mode == "📅 Single Day":
         run_options = {f"{r.run_date} (ID: {r.id})": r.id for r in runs}
         col_run, _ = st.columns([1, 2])
         selected_label = col_run.selectbox("Select Reconciliation Run", list(run_options.keys()))
@@ -1234,7 +1229,7 @@ def page_results(session_db):
         run_ids = [selected_id]
         date_label = str(run.run_date)
     else:
-        # Date range mode — use stored range or let user pick
+        # Date range mode
         range_dates = st.session_state.get('range_dates', None)
         col_s, col_e = st.columns(2)
         with col_s:
@@ -1246,8 +1241,7 @@ def page_results(session_db):
 
         selected_runs = [r for r in runs if start_dt <= r.run_date <= end_dt]
         run_ids = [r.id for r in selected_runs]
-        
-        # Shorten date label to prevent UI truncation e.g. "Nov 01 - Nov 30, '25"
+
         if start_dt.year == end_dt.year:
             date_label = f"{start_dt.strftime('%b %d')} - {end_dt.strftime('%b %d, %Y')}"
         else:
@@ -1256,8 +1250,6 @@ def page_results(session_db):
         if not selected_runs:
             st.warning(f"No reconciliation runs found between {start_dt} and {end_dt}.")
             return
-
-        st.info(f"📊 Showing results for **{len(selected_runs)} days** from {date_label}")
 
     st.divider()
 
@@ -1305,243 +1297,268 @@ def page_results(session_db):
     run = selected_runs[0]
     selected_id = run.id
 
-    # ── Tabs ──
-    tab_overview, tab_orders, tab_exceptions, tab_cross_source, tab_ageing, tab_backdated, tab_unmatched, tab_export = st.tabs([
-        "📈 Overview", "📋 Orders", "⚠️ Exceptions",
-        "🔍 Cross-Source", "⏰ Ageing", "🕵️ Backdated",
-        "❓ Unmatched", "📥 Export"
+    # ── Tabs (5 consolidated) ──
+    tab_alerts, tab_overview, tab_exceptions, tab_explorer, tab_export = st.tabs([
+        "🚨 Alerts", "📊 Overview", "📋 Exceptions",
+        "🔍 Data Explorer", "📥 Export"
     ])
 
+    # Helper: map run_id → run_date
+    run_date_map = {r.id: r.run_date for r in selected_runs}
+
     # ══════════════════════════════════════════════════════
-    # TAB 1: Overview
+    # TAB 1: ALERTS — "What's wrong?"
+    # ══════════════════════════════════════════════════════
+    with tab_alerts:
+        # ── Cash Fraud Alerts ──
+        cash_fraud = [e for e in exceptions if e.exception_type == 'CashUndeposited']
+        cash_variance = [e for e in exceptions if e.exception_type == 'CashVariance']
+        if cash_fraud:
+            st.error(f"🚨 **{len(cash_fraud)} Cash Fraud Alert(s)** — CRM cash was never deposited in the register.")
+            fraud_rows = []
+            for e in cash_fraud:
+                ev = e.evidence or {}
+                fraud_rows.append({
+                    'Date': str(run_date_map.get(e.reconciliation_run_id, '—')),
+                    'CRM Cash': f"₹{ev.get('crm_cash_total', 0):,.0f}",
+                    'Register': f"₹{ev.get('register_cash_total', 0):,.0f}",
+                    'Expenses': f"₹{ev.get('cash_expenses', 0):,.0f}",
+                    'Gap': f"₹{ev.get('undeposited_amount', ev.get('diff', 0)):,.0f}",
+                })
+            st.dataframe(pd.DataFrame(fraud_rows), width='stretch', hide_index=True)
+            with st.expander("🔎 Drill down — orders with cash on flagged dates", expanded=False):
+                for e in cash_fraud:
+                    ev = e.evidence or {}
+                    ex_date_str = ev.get('date', str(run_date_map.get(e.reconciliation_run_id, '')))
+                    try:
+                        from datetime import date as _date
+                        ex_date = _date.fromisoformat(str(ex_date_str))
+                    except Exception:
+                        continue
+                    crm_cash = session_db.query(PaymentEvent).filter(
+                        PaymentEvent.source == 'crm', PaymentEvent.payment_mode == 'Cash',
+                        PaymentEvent.payment_date == ex_date).all()
+                    if not crm_cash:
+                        continue
+                    st.markdown(f"**📅 {ex_date_str}** — ₹{ev.get('undeposited_amount', 0):,.0f} undeposited")
+                    st.dataframe(pd.DataFrame([{
+                        'Order #': (session_db.get(Order, p.order_id).order_number if p.order_id else '—'),
+                        'Customer': (session_db.get(Order, p.order_id).customer_name or '—') if p.order_id else '—',
+                        'Cash Paid': f"₹{float(p.amount):,.0f}",
+                    } for p in crm_cash]), width='stretch', hide_index=True)
+        elif cash_variance:
+            st.warning(f"💵 **{len(cash_variance)} Cash Variance(s)** — Notepad cash doesn't match Register.")
+        else:
+            st.success("✅ No cash issues detected.")
+        st.divider()
+
+        # ── GPay Mismatch ──
+        gpay_alerts = [e for e in exceptions if e.exception_type == 'GPayMismatch']
+        if gpay_alerts:
+            st.warning(f"💳 **{len(gpay_alerts)} GPay Discrepancy(ies)**")
+            st.dataframe(pd.DataFrame([{
+                'Date': str(run_date_map.get(e.reconciliation_run_id, '—')),
+                'CRM GPay': f"₹{(e.evidence or {}).get('crm_gpay', 0):,.0f}",
+                'MSWIPE': f"₹{(e.evidence or {}).get('mswipe_gpay', 0):,.0f}",
+                'Variance': f"₹{(e.evidence or {}).get('diff', 0):,.0f}",
+                'Severity': '🔴' if e.severity == 'high' else '🟡',
+            } for e in gpay_alerts]), width='stretch', hide_index=True)
+        else:
+            st.success("✅ GPay totals match MSWIPE.")
+        st.divider()
+
+        # ── Credit Policy Violations ──
+        credit_alerts = [e for e in exceptions if e.exception_type == 'CreditPolicyViolation']
+        if credit_alerts:
+            st.error(f"💳 **{len(credit_alerts)} Credit Policy Violation(s)**")
+            st.dataframe(pd.DataFrame([{
+                'Order #': e.order.order_number if e.order else '—',
+                'Customer': e.order.customer_name if e.order else '—',
+                'Balance Due': f"₹{(e.evidence or {}).get('balance', (e.evidence or {}).get('outstanding', 0)):,.0f}",
+            } for e in credit_alerts]), width='stretch', hide_index=True)
+        else:
+            st.success("✅ No credit policy violations.")
+        st.divider()
+
+        # ── Ageing Orders (collapsed) ──
+        ageing_alerts = [e for e in exceptions if e.exception_type == 'AgeingOrder']
+        if ageing_alerts:
+            with st.expander(f"⏰ {len(ageing_alerts)} Ageing Order(s) — old orders with outstanding balance", expanded=False):
+                st.dataframe(pd.DataFrame([{
+                    'Order #': e.order.order_number if e.order else '—',
+                    'Customer': e.order.customer_name if e.order else '—',
+                    'Days Old': (e.evidence or {}).get('days_since_order', '—'),
+                    'Balance': f"₹{(e.evidence or {}).get('balance', 0):,.0f}",
+                } for e in sorted(ageing_alerts, key=lambda x: (x.evidence or {}).get('days_since_order', 0), reverse=True)
+                ]), width='stretch', hide_index=True)
+
+        # ── Backdated Detections (collapsed) ──
+        bd_gpay = [e for e in exceptions if e.exception_type == 'BackdatedGPayPayment']
+        bd_cash = [e for e in exceptions if e.exception_type == 'SuspectedBackdatedCashPayment']
+        bd_crm = [e for e in exceptions if e.exception_type == 'SuspectedBackdatedCRMEntry']
+        total_bd = len(bd_gpay) + len(bd_cash) + len(bd_crm)
+        if total_bd > 0:
+            with st.expander(f"🕵️ {total_bd} Backdated Detection(s) — informational", expanded=False):
+                if bd_gpay:
+                    st.caption("**GPay Backdated**")
+                    st.dataframe(pd.DataFrame([{
+                        'Order #': e.order.order_number if e.order else '—',
+                        'Amount': f"₹{(e.evidence or {}).get('crm_amount', 0):,.0f}",
+                        'CRM Date': (e.evidence or {}).get('crm_recorded_date', '—'),
+                        'MSWIPE Date': (e.evidence or {}).get('mswipe_actual_date', '—'),
+                    } for e in bd_gpay]), width='stretch', hide_index=True)
+                if bd_cash:
+                    st.caption("**Cash Backdated**")
+                    st.dataframe(pd.DataFrame([{
+                        'Deficit Date': (e.evidence or {}).get('deficit_date', '—'),
+                        'Deficit': f"₹{(e.evidence or {}).get('deficit_amount', 0):,.0f}",
+                        'Surplus Date': (e.evidence or {}).get('surplus_date', '—'),
+                        'Surplus': f"₹{(e.evidence or {}).get('surplus_amount', 0):,.0f}",
+                    } for e in bd_cash]), width='stretch', hide_index=True)
+                if bd_crm:
+                    st.caption("**CRM Backdated**")
+                    st.dataframe(pd.DataFrame([{
+                        'CRM Date': (e.evidence or {}).get('crm_recorded_date', '—'),
+                        'Suspected Date': (e.evidence or {}).get('suspected_collection_date', '—'),
+                        'Deficit': f"₹{(e.evidence or {}).get('crm_deficit', 0):,.0f}",
+                    } for e in bd_crm]), width='stretch', hide_index=True)
+
+    # ══════════════════════════════════════════════════════
+    # TAB 2: Overview
     # ══════════════════════════════════════════════════════
     with tab_overview:
-        # Top-level metrics
         total_ex = len(exceptions)
         high_ex = sum(1 for e in exceptions if e.severity == 'high')
         medium_ex = sum(1 for e in exceptions if e.severity == 'medium')
         low_ex = sum(1 for e in exceptions if e.severity in ('low', 'info'))
-        late_ex = sum(1 for e in exceptions if e.exception_type == 'LatePayment')
-        ageing_ex = sum(1 for e in exceptions if e.exception_type == 'AgeingOrder')
-        backdated_ex = sum(1 for e in exceptions if e.exception_type in (
-            'BackdatedGPayPayment', 'BackdatedCashPayment'))
-        row1_cols = st.columns(4)
-        row1_cols[0].metric("📅 Period", date_label, help=f"Reconciliation period: {date_label}")
-        row1_cols[1].metric("✅ Runs", str(len(selected_runs)), help="Number of daily runs included in this view")
-        row1_cols[2].metric("📋 Orders", str(len(recon_orders)), help="Total unique orders reconciled")
-        row1_cols[3].metric("⚠️ Exceptions", str(total_ex), help="Total number of exceptions flagged")
-
-        st.write("") # slight vertical spacing
-        
-        row2_cols = st.columns(4)
-        row2_cols[0].metric("⏰ Late Payments", str(late_ex), help="Payments received after the delivery threshold")
-        row2_cols[1].metric("⏰ Ageing", str(ageing_ex), help="Old orders without delivery completely fulfilled")
-        row2_cols[2].metric("🕵️ Backdated", str(backdated_ex), help="Payments correlated with past surpluses or delayed sweeps")
-        # Empty 4th column for alignment consistency
-
+        row1 = st.columns(4)
+        row1[0].metric("📅 Period", date_label)
+        row1[1].metric("✅ Runs", str(len(selected_runs)))
+        row1[2].metric("📋 Orders", str(len(recon_orders)))
+        row1[3].metric("⚠️ Exceptions", str(total_ex))
         st.divider()
-
-        # Severity breakdown + exception type breakdown side by side
         col_sev, col_type = st.columns(2)
-
         with col_sev:
-            st.subheader("Exceptions by Severity")
+            st.subheader("Severity Breakdown")
             if total_ex > 0:
-                sev_data = pd.DataFrame({
-                    'Severity': ['🔴 High', '🟡 Medium', '🟢 Low/Info'],
-                    'Count': [high_ex, medium_ex, low_ex]
-                })
+                sev_data = pd.DataFrame({'Severity': ['🔴 High', '🟡 Medium', '🟢 Low/Info'], 'Count': [high_ex, medium_ex, low_ex]})
                 st.bar_chart(sev_data.set_index('Severity'), horizontal=True)
             else:
                 st.success("No exceptions!")
-
         with col_type:
-            st.subheader("Exceptions by Type")
+            st.subheader("Type Breakdown")
             if total_ex > 0:
                 type_counts = {}
                 for e in exceptions:
                     type_counts[e.exception_type] = type_counts.get(e.exception_type, 0) + 1
-                type_df = pd.DataFrame(
-                    [{'Type': k, 'Count': v} for k, v in sorted(type_counts.items(), key=lambda x: -x[1])]
-                )
-                st.dataframe(type_df, width='stretch', hide_index=True)
+                st.dataframe(pd.DataFrame([{'Type': k, 'Count': v} for k, v in sorted(type_counts.items(), key=lambda x: -x[1])]), width='stretch', hide_index=True)
             else:
                 st.success("No exceptions!")
-
         st.divider()
-
-        # Payment summary — dynamic, no hardcoded modes
         st.subheader("💰 Payment Summary")
         crm_payments_list = [p for p in day_payments if p.source == 'crm']
         mswipe_payments_list = [p for p in day_payments if p.source == 'mswipe']
-
-        # Group CRM payments by mode
         crm_by_mode = {}
         for p in crm_payments_list:
             mode = p.payment_mode or 'Unknown'
             crm_by_mode[mode] = crm_by_mode.get(mode, 0) + float(p.amount)
-
         crm_total = sum(crm_by_mode.values())
         mswipe_total = sum(float(p.amount) for p in mswipe_payments_list)
-
-        # GPay variants for variance calc (Google Pay, GPay, UPI)
         gpay_modes = {'Google Pay', 'GPay', 'UPI'}
         crm_gpay = sum(v for k, v in crm_by_mode.items() if k in gpay_modes)
-
         col_p1, col_p2, col_p3 = st.columns(3)
         col_p1.metric("CRM Total", f"₹{crm_total:,.0f}")
         col_p2.metric("MSWIPE Total", f"₹{mswipe_total:,.0f}")
         col_p3.metric("GPay Variance", f"₹{crm_gpay - mswipe_total:,.0f}",
                       delta=f"₹{crm_gpay - mswipe_total:,.0f}",
                       delta_color="inverse" if crm_gpay != mswipe_total else "off")
-
-        # Mode-wise breakdown table
-        mode_icons = {'Cash': '�', 'Google Pay': '💳', 'GPay': '💳', 'UPI': '💳',
-                      'Paytm': '�', 'Package': '📦', 'Card': '💳', 'Online': '🌐',
-                      'Advance': '�', 'Due': '⏳'}
+        mode_icons = {'Cash': '💵', 'Google Pay': '💳', 'GPay': '💳', 'UPI': '💳', 'Paytm': '📱', 'Package': '📦', 'Card': '💳', 'Online': '🌐', 'Advance': '⏩', 'Due': '⏳'}
         pay_rows = []
         for mode in sorted(crm_by_mode.keys()):
             icon = mode_icons.get(mode, '🔹')
-            pay_rows.append({
-                'Mode': f"{icon} {mode}",
-                'CRM Amount': f"₹{crm_by_mode[mode]:,.0f}",
-                'Transactions': sum(1 for p in crm_payments_list if (p.payment_mode or 'Unknown') == mode)
-            })
+            pay_rows.append({'Mode': f"{icon} {mode}", 'CRM Amount': f"₹{crm_by_mode[mode]:,.0f}", 'Transactions': sum(1 for p in crm_payments_list if (p.payment_mode or 'Unknown') == mode)})
         if pay_rows:
             st.dataframe(pd.DataFrame(pay_rows), width='stretch', hide_index=True)
 
     # ══════════════════════════════════════════════════════
-    # TAB 2: Reconciled Orders
-    # ══════════════════════════════════════════════════════
-    with tab_orders:
-        st.subheader(f"Orders Active in {date_label}")
-        if recon_orders:
-            orders_data = []
-            for o in recon_orders:
-                # Only sum payments within the selected date range
-                paid = sum(float(p.amount) for p in o.payments if p.id in in_range_payment_ids)
-                excs = [e for e in exceptions if e.order_id == o.id]
-                orders_data.append({
-                    'Order #': o.order_number,
-                    'Customer': o.customer_name or '—',
-                    'Order Amount': f"₹{float(o.order_amount):,.0f}",
-                    'Paid': f"₹{paid:,.0f}",
-                    'Balance': f"₹{float(o.order_amount) - paid:,.0f}",
-                    'Status': '⚠️ Exception' if excs else '✅ Clean',
-                    'Issues': ', '.join(e.exception_type for e in excs) or '—'
-                })
-            st.dataframe(pd.DataFrame(orders_data), width='stretch', hide_index=True)
-
-            # Summary row
-            total_ordered = sum(float(o.order_amount) for o in recon_orders)
-            total_paid = sum(
-                sum(float(p.amount) for p in o.payments if p.id in in_range_payment_ids)
-                for o in recon_orders
-            )
-            st.info(f"**Totals:** ₹{total_ordered:,.0f} ordered · ₹{total_paid:,.0f} paid · "
-                    f"₹{total_ordered - total_paid:,.0f} outstanding · "
-                    f"{sum(1 for d in orders_data if '✅' in d['Status'])}/{len(orders_data)} clean")
-        else:
-            st.info("No orders found for this date.")
-
-    # ══════════════════════════════════════════════════════
-    # TAB 3: Exceptions Queue
+    # TAB 3: Exceptions Queue (simplified filters)
     # ══════════════════════════════════════════════════════
     with tab_exceptions:
-        st.subheader("Exceptions Queue")
-
+        st.subheader("📋 Exceptions List")
+        with st.expander("ℹ️ Exception Types Guide", expanded=False):
+            st.markdown("Here is what each exception type means:")
+            for ex_type, desc in EXCEPTION_DESCRIPTIONS.items():
+                st.markdown(f"- **{ex_type}**: {desc}")
+        
         if exceptions:
-            # Filters
-            col_f1, col_f2, col_f3, col_f4 = st.columns(4)
-            severities = sorted(set(e.severity for e in exceptions))
-            filter_severity = col_f1.multiselect("Severity", severities, default=severities,
-                                                 key="dash_filter_sev")
-            types = sorted(set(e.exception_type for e in exceptions))
-            filter_type = col_f2.multiselect("Type", types, default=types, key="dash_filter_type")
-            statuses = sorted(set(e.resolution_status for e in exceptions))
-            filter_status = col_f3.multiselect("Status", statuses, default=statuses,
-                                               key="dash_filter_status")
-            # Date filter (get dates from reconciliation runs linked to exceptions)
-            ex_run_dates = sorted(set(
-                r.run_date for r in selected_runs
-                if r.id in {e.reconciliation_run_id for e in exceptions}
-            ))
-            if len(ex_run_dates) > 1:
-                filter_dates = col_f4.multiselect("Date", [str(d) for d in ex_run_dates],
-                                                  default=[str(d) for d in ex_run_dates],
-                                                  key="dash_filter_date")
-                filter_date_set = {d for d in ex_run_dates if str(d) in filter_dates}
-                # Map run_id to run_date for filtering
-                run_date_map = {r.id: r.run_date for r in selected_runs}
-            else:
-                filter_date_set = None
-                run_date_map = {r.id: r.run_date for r in selected_runs}
+            # Collapsible filter panel
+            with st.expander("🔧 Filters", expanded=False):
+                col_f1, col_f2, col_f3 = st.columns(3)
+                severities = sorted(set(e.severity for e in exceptions))
+                filter_severity = col_f1.multiselect("Severity", severities, default=severities, key="dash_filter_sev")
+                types = sorted(set(e.exception_type for e in exceptions))
+                filter_type = col_f2.multiselect("Type", types, default=types, key="dash_filter_type")
+                statuses = sorted(set(e.resolution_status for e in exceptions))
+                filter_status = col_f3.multiselect("Status", statuses, default=statuses, key="dash_filter_status")
 
             ex_data = []
             for ex in exceptions:
                 if (ex.severity in filter_severity and
                     ex.exception_type in filter_type and
                     ex.resolution_status in filter_status):
-                    # Date filter
-                    if filter_date_set is not None:
-                        ex_date = run_date_map.get(ex.reconciliation_run_id)
-                        if ex_date not in filter_date_set:
-                            continue
-
                     evidence_str = ''
                     if ex.evidence:
-                        evidence_str = ', '.join(f"{k}: {v}" for k, v in ex.evidence.items()
-                                                if k != 'raw_data')
-
-                    # Get order details for drilldown
+                        evidence_str = ', '.join(f"{k}: {v}" for k, v in ex.evidence.items() if k != 'raw_data')
                     order_num = ex.order.order_number if ex.order else 'Day-Level'
-                    customer = ex.order.customer_name if ex.order else '—'
-                    amount = f"₹{float(ex.order.order_amount):,.0f}" if ex.order else '—'
                     ex_date = run_date_map.get(ex.reconciliation_run_id, '—')
-
+                    desc = EXCEPTION_DESCRIPTIONS.get(ex.exception_type, '')
+                    rule_hint = desc.split('.')[0] + '.' if desc else '—'
                     ex_data.append({
                         'ID': ex.id,
                         'Date': str(ex_date),
                         'Order': order_num,
-                        'Customer': customer,
-                        'Amount': amount,
                         'Severity': '🔴' if ex.severity == 'high' else '🟡' if ex.severity == 'medium' else '🟢',
                         'Type': ex.exception_type,
+                        'Rule': rule_hint,
                         'Evidence': evidence_str,
-                        'Action': ex.suggested_action,
-                        'Status': ex.resolution_status
+                        'Status': ex.resolution_status,
                     })
 
             if ex_data:
-                # ── Exception legend ──────────────────────────────────
-                with st.expander("📖 Exception Rule Reference", expanded=False):
-                    st.caption("What each exception type means and which rule triggered it:")
-                    present_types = sorted(set(d['Type'] for d in ex_data))
-                    for exc_type in present_types:
-                        desc = EXCEPTION_DESCRIPTIONS.get(exc_type, 'No description available.')
-                        st.markdown(f"**`{exc_type}`** — {desc}")
-
-                # ── Add Rule Description column to table ──────────────
+                # Render as HTML table to support native tooltips on the exception types
+                html = "<table style='width:100%; border-collapse: collapse; font-size: 0.9em; margin-bottom: 1rem;'>"
+                html += "<tr style='border-bottom: 2px solid #ddd; text-align: left;'>"
+                html += "<th style='padding: 8px;'>ID</th><th style='padding: 8px;'>Date</th><th style='padding: 8px;'>Order</th>"
+                html += "<th style='padding: 8px;'>Severity</th><th style='padding: 8px;'>Type</th><th style='padding: 8px;'>Rule</th>"
+                html += "<th style='padding: 8px;'>Evidence</th><th style='padding: 8px;'>Status</th></tr>"
+                
                 for row in ex_data:
-                    short_desc = EXCEPTION_DESCRIPTIONS.get(row['Type'], '')
-                    # Truncate to first sentence for table readability
-                    row['Rule'] = short_desc.split('.')[0] + '.' if short_desc else '—'
+                    desc = EXCEPTION_DESCRIPTIONS.get(row['Type'], '').replace('"', '&quot;')
+                    type_html = f'<span title="{desc}" style="cursor: help; border-bottom: 1px dotted #888; font-weight: bold;">{row["Type"]}</span>'
+                    html += f"<tr style='border-bottom: 1px solid #eee;'>"
+                    html += f"<td style='padding: 8px;'>{row['ID']}</td>"
+                    html += f"<td style='padding: 8px;'>{row['Date']}</td>"
+                    html += f"<td style='padding: 8px;'>{row['Order']}</td>"
+                    html += f"<td style='padding: 8px;'>{row['Severity']}</td>"
+                    html += f"<td style='padding: 8px;'>{type_html}</td>"
+                    html += f"<td style='padding: 8px;'>{row['Rule']}</td>"
+                    html += f"<td style='padding: 8px;'>{row['Evidence']}</td>"
+                    html += f"<td style='padding: 8px;'>{row['Status']}</td>"
+                    html += "</tr>"
+                html += "</table>"
+                
+                st.markdown(html, unsafe_allow_html=True)
+                st.caption(f"Showing {len(ex_data)} of {len(exceptions)} exceptions")
 
-                st.dataframe(pd.DataFrame(ex_data), width='stretch', hide_index=True)
-                st.caption(f"Showing {len(ex_data)} of {len(exceptions)} exceptions · Expand **Exception Rule Reference** above for full descriptions")
-            else:
-                st.info("No exceptions match the selected filters.")
-
-            # Resolution
-            st.divider()
-            st.subheader("Resolve Exception")
-            ex_ids = [e['ID'] for e in ex_data] if ex_data else []
-            if ex_ids:
+                # Resolution widget
+                st.divider()
+                st.subheader("Resolve Exception")
+                ex_ids = [e['ID'] for e in ex_data]
                 sel_id = st.selectbox("Select Exception ID", ex_ids, key="dash_resolve_id")
                 sel_ex = next((e for e in ex_data if e['ID'] == sel_id), None)
                 if sel_ex:
-                    st.caption(f"**{sel_ex['Type']}** — {sel_ex['Order']} — {sel_ex['Evidence']}")
-                resolution = st.radio("Action", ["resolved", "false_positive"], key="dash_resolve_act")
+                    st.caption(f"**{sel_ex['Type']}** — {sel_ex['Order']} — {sel_ex['Evidence'][:80]}")
+                resolution = st.radio("Action", ["resolved", "false_positive"], key="dash_resolve_act", horizontal=True)
                 note = st.text_input("Resolution Note", key="dash_resolve_note")
                 if st.button("✅ Resolve", key="dash_resolve_btn"):
                     ex_obj = session_db.get(OrderException, sel_id)
@@ -1552,210 +1569,80 @@ def page_results(session_db):
                         session_db.commit()
                         st.success(f"Exception {sel_id} marked as '{resolution}'")
                         st.rerun()
+            else:
+                st.info("No exceptions match the selected filters.")
         else:
-            st.success("🎉 No exceptions found for this run!")
+            st.success("🎉 No exceptions found!")
 
     # ══════════════════════════════════════════════════════
-    # TAB 4: Cross-Source Drill-Down
+    # TAB 4: Data Explorer (Orders + Cross-Source)
     # ══════════════════════════════════════════════════════
-    with tab_cross_source:
+    with tab_explorer:
+        st.subheader(f"Orders Active in {date_label}")
+        search_order = st.text_input("🔍 Search by Order #", key="dash_exp_search_order").strip().lower()
+        if recon_orders:
+            orders_data = []
+            if search_order:
+                import rapidfuzz
+            for o in recon_orders:
+                if search_order:
+                    # Exact prefix match OR fuzzy prefix match > 70
+                    order_str = o.order_number.lower()
+                    if not order_str.startswith(search_order):
+                        # Compare against the prefix of the order string of the same length
+                        prefix = order_str[:len(search_order)] if len(order_str) >= len(search_order) else order_str
+                        score = rapidfuzz.fuzz.ratio(search_order, prefix)
+                        if score < 70:
+                            continue
+                paid = sum(float(p.amount) for p in o.payments if p.id in in_range_payment_ids)
+                excs = [e for e in exceptions if e.order_id == o.id]
+                orders_data.append({
+                    'Order #': o.order_number,
+                    'Customer': o.customer_name or '—',
+                    'Amount': f"₹{float(o.order_amount):,.0f}",
+                    'Paid': f"₹{paid:,.0f}",
+                    'Balance': f"₹{float(o.order_amount) - paid:,.0f}",
+                    'Status': '⚠️' if excs else '✅',
+                    'Issues': ', '.join(e.exception_type for e in excs) or '—'
+                })
+            st.dataframe(pd.DataFrame(orders_data), width='stretch', hide_index=True)
+            total_ordered = sum(float(o.order_amount) for o in recon_orders)
+            total_paid = sum(sum(float(p.amount) for p in o.payments if p.id in in_range_payment_ids) for o in recon_orders)
+            st.caption(f"₹{total_ordered:,.0f} ordered · ₹{total_paid:,.0f} paid · ₹{total_ordered - total_paid:,.0f} outstanding")
+        else:
+            st.info("No orders found for this period.")
+
+        st.divider()
+
+        # Cross-Source Verification
         st.subheader("🔍 Cross-Source Payment Verification")
-        st.caption(
-            "Orders where a CRM payment could not be confirmed by the expected external source "
-            "(MSWIPE for GPay, Cash Register for Cash, Notepad for Paytm/Online/Package). "
-            "Also includes payments collected per Notepad but absent from CRM."
-        )
-
         cross_source_types = {
-            'GPayOrderMismatch':        ('💳 GPay → No MSWIPE',      'medium'),
-            'CashOrderNoRegister':      ('💵 Cash → No Register',     'medium'),
-            'PaymentNotConfirmedByNotepad': ('📋 Online/Paytm → No Notepad', 'low'),
-            'NotepadPaymentNotInCRM':   ('📝 Notepad Payment → No CRM', 'high'),
+            'GPayOrderMismatch': '💳 GPay → No MSWIPE',
+            'CashOrderNoRegister': '💵 Cash → No Register',
+            'PaymentNotConfirmedByNotepad': '📋 Online → No Notepad',
+            'NotepadPaymentNotInCRM': '📝 Notepad → No CRM',
         }
-
-        cross_exceptions = [e for e in exceptions
-                            if e.exception_type in cross_source_types]
-
+        cross_exceptions = [e for e in exceptions if e.exception_type in cross_source_types]
         if not cross_exceptions:
             st.success("✅ All payments confirmed across sources.")
         else:
-            # Metric summary
-            cs_cols = st.columns(len(cross_source_types))
-            for i, (exc_type, (label, _)) in enumerate(cross_source_types.items()):
-                cnt = sum(1 for e in cross_exceptions if e.exception_type == exc_type)
-                cs_cols[i].metric(label, cnt)
-
-            st.divider()
-
-            # Group by exception type with an expander per group
-            for exc_type, (label, default_sev) in cross_source_types.items():
+            for exc_type, label in cross_source_types.items():
                 grp = [e for e in cross_exceptions if e.exception_type == exc_type]
                 if not grp:
                     continue
-
-                with st.expander(f"{label} — **{len(grp)} order(s)**", expanded=True):
-                    rows = []
-                    for e in grp:
-                        ev = e.evidence or {}
-                        rows.append({
-                            'Order #': e.order.order_number if e.order else '—',
-                            'Customer': e.order.customer_name if e.order else '—',
-                            'Amount': f"₹{ev.get('crm_amount') or ev.get('notepad_amount', 0):,.0f}",
-                            'Mode': ev.get('payment_mode') or ev.get('notepad_mode', '—'),
-                            'Missing Source': ev.get('missing_source', 'CRM'),
-                            'Date': ev.get('crm_date') or ev.get('notepad_date', '—'),
-                            'Severity': '🔴' if e.severity == 'high' else '🟡' if e.severity == 'medium' else '🟢',
-                            'Action': e.suggested_action or '—',
-                        })
-                    st.dataframe(pd.DataFrame(rows), width='stretch', hide_index=True)
-
-    # ══════════════════════════════════════════════════════
-    # TAB 5: Ageing Orders
-    # ══════════════════════════════════════════════════════
-    with tab_ageing:
-        st.subheader("⏰ Ageing Orders — Sev 1")
-        st.caption(
-            "Orders older than the configured threshold (default 10 days) with no delivery "
-            "recorded in CRM or Delivery Notes, and an outstanding balance. "
-            "These require immediate follow-up with the delivery team."
-        )
-
-        ageing_exceptions = [e for e in exceptions if e.exception_type == 'AgeingOrder']
-
-        if not ageing_exceptions:
-            st.success("✅ No ageing orders found.")
-        else:
-            st.error(f"🔴 **{len(ageing_exceptions)} ageing order(s)** require immediate attention.")
-
-            ageing_rows = []
-            for e in sorted(ageing_exceptions,
-                            key=lambda x: x.evidence.get('days_since_order', 0) if x.evidence else 0,
-                            reverse=True):
-                ev = e.evidence or {}
-                ageing_rows.append({
-                    'Order #': e.order.order_number if e.order else '—',
-                    'Customer': e.order.customer_name if e.order else '—',
-                    'Order Date': ev.get('order_date', '—'),
-                    'Days Since Order': ev.get('days_since_order', '—'),
-                    'Order Amount': f"₹{ev.get('order_amount', 0):,.0f}",
-                    'Balance Due': f"₹{ev.get('balance', 0):,.0f}",
-                    'Severity': '🔴 High',
-                    'Action': e.suggested_action or '—',
-                })
-            st.dataframe(pd.DataFrame(ageing_rows), width='stretch', hide_index=True)
-            total_ageing_balance = sum(
-                (e.evidence or {}).get('balance', 0) for e in ageing_exceptions
-            )
-            st.error(f"**Total outstanding balance in ageing orders: ₹{total_ageing_balance:,.0f}**")
-
-    # ══════════════════════════════════════════════════════
-    # TAB 6: Backdated Payments
-    # ══════════════════════════════════════════════════════
-    with tab_backdated:
-        st.subheader("🕵️ Backdated Payment Detections")
-        st.caption(
-            "Payments recorded in CRM on one date but whose actual receipt date (per MSWIPE "
-            "or Cash Register correlation) appears to be a different date. "
-            "GPay matches are precise; Cash matches are probabilistic leads for investigation."
-        )
-
-        gpay_backdated = [e for e in exceptions if e.exception_type == 'BackdatedGPayPayment']
-        cash_backdated = [e for e in exceptions if e.exception_type == 'SuspectedBackdatedCashPayment']
-
-        if not gpay_backdated and not cash_backdated:
-            st.success("✅ No backdated payment patterns detected.")
-        else:
-            col_bg, col_bc = st.columns(2)
-            col_bg.metric("💳 Backdated GPay", len(gpay_backdated))
-            col_bc.metric("💵 Suspected Cash", len(cash_backdated))
-
-            if gpay_backdated:
-                st.divider()
-                st.markdown("**💳 Backdated GPay Payments** *(confirmed via MSWIPE)*")
-                gp_rows = []
-                for e in gpay_backdated:
-                    ev = e.evidence or {}
-                    gp_rows.append({
+                with st.expander(f"{label} — **{len(grp)} order(s)**", expanded=False):
+                    st.dataframe(pd.DataFrame([{
                         'Order #': e.order.order_number if e.order else '—',
-                        'Customer': e.order.customer_name if e.order else '—',
-                        'Amount': f"₹{ev.get('crm_amount', 0):,.0f}",
-                        'CRM Recorded Date': ev.get('crm_recorded_date', '—'),
-                        'MSWIPE Actual Date': ev.get('mswipe_actual_date', '—'),
-                        'Days Offset': ev.get('days_offset', '—'),
-                        'Action': e.suggested_action or '—',
-                    })
-                st.dataframe(pd.DataFrame(gp_rows), width='stretch', hide_index=True)
-
-            if cash_backdated:
-                st.divider()
-                st.markdown("**💵 Suspected Backdated Cash Payments** *(probabilistic — investigate)*")
-                st.info(
-                    "These are leads, not confirmed matches. A cash deficit on one date "
-                    "correlates with a surplus on another date. Review manually."
-                )
-                bc_rows = []
-                for e in cash_backdated:
-                    ev = e.evidence or {}
-                    bc_rows.append({
-                        'Deficit Date': ev.get('deficit_date', '—'),
-                        'Deficit (₹)': f"₹{ev.get('deficit_amount', 0):,.0f}",
-                        'Surplus Date': ev.get('surplus_date', '—'),
-                        'Surplus (₹)': f"₹{ev.get('surplus_amount', 0):,.0f}",
-                        'Days Apart': ev.get('days_offset', '—'),
-                        'Action': e.suggested_action or '—',
-                    })
-                st.dataframe(pd.DataFrame(bc_rows), width='stretch', hide_index=True)
+                        'Amount': f"₹{(e.evidence or {}).get('crm_amount', (e.evidence or {}).get('notepad_amount', 0)):,.0f}",
+                        'Mode': (e.evidence or {}).get('payment_mode', (e.evidence or {}).get('notepad_mode', '—')),
+                        'Date': (e.evidence or {}).get('crm_date', (e.evidence or {}).get('notepad_date', '—')),
+                    } for e in grp]), width='stretch', hide_index=True)
 
     # ══════════════════════════════════════════════════════
-    # TAB 7: Unmatched Entries
-    # ══════════════════════════════════════════════════════
-    with tab_unmatched:
-        col_np, col_ms = st.columns(2)
-
-        with col_np:
-            st.subheader("📝 Unmatched Notepad")
-            if unmatched_notepad:
-                np_data = [{
-                    'Date': d.delivery_date,
-                    'Customer': d.customer_name or '—',
-                    'Amount': f"₹{float(d.amount_collected or 0):,.0f}",
-                    'Mode': d.payment_mode or '—',
-                    'Runner': d.runner_name or '—'
-                } for d in unmatched_notepad]
-                st.dataframe(pd.DataFrame(np_data), width='stretch', hide_index=True)
-                st.caption(f"{len(np_data)} unmatched entries")
-            else:
-                st.success("All notepad entries matched!")
-
-        with col_ms:
-            st.subheader("💳 Unmatched MSWIPE")
-            if unmatched_mswipe:
-                ms_data = [{
-                    'Date': p.payment_date,
-                    'Amount': f"₹{float(p.amount):,.0f}",
-                    'Ref': str(p.mswipe_ref_ids) if p.mswipe_ref_ids else '—',
-                    'Mode': p.original_mode or '—'
-                } for p in unmatched_mswipe]
-                st.dataframe(pd.DataFrame(ms_data), width='stretch', hide_index=True)
-                st.caption(f"{len(ms_data)} unmatched entries")
-            else:
-                st.success("All MSWIPE entries matched!")
-
-    # ══════════════════════════════════════════════════════
-    # TAB 8: Export
+    # TAB 5: Export + Unmatched
     # ══════════════════════════════════════════════════════
     with tab_export:
         st.subheader("📥 Export to Excel")
-        st.write("Generate a 6-sheet Excel workbook with all reconciliation data:")
-        st.markdown("""
-        1. **Reconciled Orders** — all orders with status
-        2. **Exceptions** — flagged issues with evidence
-        3. **Unmatched Notepad** — notepad entries without order matches
-        4. **Unmatched MSWIPE** — MSWIPE payments without order matches
-        5. **Daily Summary** — totals and variance calculations
-        6. **Audit Log** — system activity log
-        """)
-
         if st.button("📥 Generate Excel Report", key="dash_export_btn", type="primary"):
             with st.spinner("Generating report..."):
                 exporter = ExcelExporter(session_db)
@@ -1768,6 +1655,30 @@ def page_results(session_db):
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
 
+        st.divider()
+
+        # Unmatched entries
+        col_np, col_ms = st.columns(2)
+        with col_np:
+            st.subheader("📝 Unmatched Notepad")
+            if unmatched_notepad:
+                st.dataframe(pd.DataFrame([{
+                    'Date': d.delivery_date, 'Customer': d.customer_name or '—',
+                    'Amount': f"₹{float(d.amount_collected or 0):,.0f}", 'Mode': d.payment_mode or '—',
+                } for d in unmatched_notepad]), width='stretch', hide_index=True)
+                st.caption(f"{len(unmatched_notepad)} unmatched")
+            else:
+                st.success("All matched!")
+        with col_ms:
+            st.subheader("💳 Unmatched MSWIPE")
+            if unmatched_mswipe:
+                st.dataframe(pd.DataFrame([{
+                    'Date': p.payment_date, 'Amount': f"₹{float(p.amount):,.0f}",
+                    'Ref': str(p.mswipe_ref_ids) if p.mswipe_ref_ids else '—',
+                } for p in unmatched_mswipe]), width='stretch', hide_index=True)
+                st.caption(f"{len(unmatched_mswipe)} unmatched")
+            else:
+                st.success("All matched!")
 
 # ── Page: History ─────────────────────────────────────────
 

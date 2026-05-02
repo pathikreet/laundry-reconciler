@@ -116,3 +116,66 @@ footer {visibility: hidden;}
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.12);
 }
+
+/* ── Global Font & Spacing Reduction ───────────────── */
+
+/* Page titles and headers */
+[data-testid="stAppViewContainer"] h1 {
+    font-size: 1.5rem !important;
+    margin-bottom: 0.3rem !important;
+}
+[data-testid="stAppViewContainer"] h2 {
+    font-size: 1.15rem !important;
+    margin-bottom: 0.2rem !important;
+}
+[data-testid="stAppViewContainer"] h3 {
+    font-size: 1rem !important;
+    margin-bottom: 0.15rem !important;
+}
+
+/* Metric widgets — compact value and label */
+[data-testid="stMetric"] {
+    padding: 0.3rem 0 !important;
+}
+[data-testid="stMetricValue"] {
+    font-size: 1.1rem !important;
+}
+[data-testid="stMetricLabel"] {
+    font-size: 0.78rem !important;
+}
+[data-testid="stMetricDelta"] {
+    font-size: 0.72rem !important;
+}
+
+/* Tab labels */
+[data-testid="stTab"] button p {
+    font-size: 0.82rem !important;
+}
+
+/* Captions and info boxes */
+[data-testid="stAppViewContainer"] .stCaption,
+[data-testid="stAppViewContainer"] small {
+    font-size: 0.76rem !important;
+}
+
+/* Dataframe cells */
+[data-testid="stDataFrame"] td,
+[data-testid="stDataFrame"] th {
+    font-size: 0.8rem !important;
+    padding: 0.25rem 0.5rem !important;
+}
+
+/* Expander headers */
+[data-testid="stExpander"] summary span {
+    font-size: 0.85rem !important;
+}
+
+/* Reduce top padding on main container */
+.stMainBlockContainer {
+    padding-top: 1rem !important;
+}
+
+/* Sidebar labels */
+[data-testid="stSidebar"] label {
+    font-size: 0.85rem !important;
+}

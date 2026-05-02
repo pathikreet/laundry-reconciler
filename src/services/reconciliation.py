@@ -499,7 +499,7 @@ class ReconciliationService:
                 )
                 if not mswipe_linked:
                     self._create_exception(
-                        run_id, order.id, 'medium', 'GPayOrderMismatch',
+                        run_id, order.id, 'high', 'GPayOrderMismatch',
                         tags=['MissingMSWIPE', 'CrossSourceMismatch'],
                         evidence={
                             'crm_amount': round(float(payment.amount), 2),
@@ -576,10 +576,6 @@ class ReconciliationService:
 
         count = 0
         for order in old_orders:
-            # Skip if any delivery exists (from any source)
-            if order.deliveries:
-                continue
-
             balance = float(order.order_amount) - sum(float(p.amount) for p in order.payments)
             if balance <= self.credit_tolerance:
                 continue  # Fully paid — not a concern
