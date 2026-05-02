@@ -11,10 +11,12 @@ logger = logging.getLogger(__name__)
 class MSwipeImporter(BaseImporter):
     def import_data(self, file_path: str, **kwargs) -> List[Dict[str, Any]]:
         if file_path.endswith('.csv'):
-            df = pd.read_csv(file_path)
+            df = pd.read_csv(file_path, parse_dates=False)
         else:
             try:
-                df = read_excel_auto(file_path)
+                # parse_dates=False keeps date columns as raw strings so
+                # _parse_date can handle them explicitly (avoids ISO date bug).
+                df = read_excel_auto(file_path, parse_dates=False)
             except Exception:
                 # MSWIPE often exports HTML tables disguised as .xls files.
                 # When xlrd/openpyxl fails, try reading as HTML.
@@ -32,6 +34,14 @@ class MSwipeImporter(BaseImporter):
                 except Exception as e:
                     logger.error("HTML fallback also failed for %s: %s", file_path, e)
                     raise
+
+        # Detect XLSX portal format: dates are MM/DD/YYYY but Excel may have
+        # auto-converted some to YYYY-DD-MM (swapping month and day).
+        # The 'Tx Date Time' column is unique to the XLSX transactions report.
+        self._is_xlsx_portal = 'Tx Date Time' in df.columns
+        if self._is_xlsx_portal:
+            logger.info("Detected XLSX portal format (Tx Date Time column present)")
+
         df = df.where(pd.notnull(df), None)
         return [sanitize_raw_data(row) for row in df.to_dict(orient='records')]
 
@@ -67,11 +77,16 @@ class MSwipeImporter(BaseImporter):
             if not payment_date:
                 continue
 
-            # Mode
-            mode = str(get_val(['Interchange', 'CardType', 'PayeeVPA', 'PaymentMode', 'Mode Of Payment']) or 'Card').strip()
+            # Mode (Switch_Card_Type is the XLSX equivalent of CardType/Interchange)
+            mode = str(get_val(['Interchange', 'CardType', 'Switch_Card_Type', 'PayeeVPA',
+                                'PaymentMode', 'Mode Of Payment', 'Card Holder Name']) or 'Card').strip()
 
-            # Ref IDs
-            ref_id = str(get_val(['RR_NO', 'Stan_No', 'Mswipe_Ref_No', 'ARN', 'RefId', 'RR No']) or '').strip()
+            # Ref IDs (Voucher No is an XLSX-only unique txn reference)
+            ref_id = str(get_val(['RR_NO', 'RR No', 'Stan_No', 'Stan No',
+                                  'Mswipe_Ref_No', 'Voucher No', 'ARN', 'RefId']) or '').strip()
+            # Strip leading apostrophe from RR No (XLSX portal adds it)
+            if ref_id.startswith("'"):
+                ref_id = ref_id[1:]
 
             normalized_row = {
                 'payment_date': payment_date,
@@ -137,57 +152,49 @@ class MSwipeImporter(BaseImporter):
         self.db.commit()
 
     def _parse_date(self, date_str: Any) -> Optional[Any]:
-        """Parse MSWIPE date strings which come in two formats:
+        """Parse MSWIPE date strings which come in multiple formats:
         
-        1. MM/DD/YYYY HH:MM:SS  (slash-separated, US format)
-        2. YYYY-DD-MM HH:MM:SS  (dash-separated, day/month SWAPPED by Excel)
+        1. MM/DD/YYYY HH:MM:SS  (slash-separated, US format — XLSX portal)
+        2. DD-Mon-YYYY           (dash with month name — CSV portal)
+        3. YYYY-DD-MM ...        (ISO-like but with day/month swapped by Excel)
         
-        Excel's cell protection can produce YYYY-DD-MM dates instead of
-        YYYY-MM-DD. We handle this with:
-          - If first value > 12: definitely a day, so swap (unambiguous)
-          - If both <= 12: try default parse; if result is in the future,
-            try swapping — if swap gives a past date, use that instead.
+        The XLSX portal exports dates as MM/DD/YYYY. When Excel encounters
+        ambiguous dates (both components <= 12), it auto-converts them to
+        ISO format but with month and day SWAPPED (YYYY-DD-MM instead of
+        YYYY-MM-DD). We detect this via the _is_xlsx_portal flag set in
+        import_data and swap them back.
         """
         if date_str is None or pd.isna(date_str) or str(date_str).strip() == '':
             return None
         try:
-            s = str(date_str).strip()
+            import re
             from datetime import date as date_cls
-            today = date_cls.today()
+            s = str(date_str).strip()
             
-            # Format 1: MM/DD/YYYY — handle with dayfirst=False
-            if '/' in s:
-                return parse(s, dayfirst=False).date()
-            
-            # Format 2: YYYY-A-B (dash-separated ISO-like)
-            date_part = s.split(' ')[0] if ' ' in s else s
-            parts = date_part.split('-')
-            if len(parts) == 3:
-                year_s, a_s, b_s = parts
-                year, a, b = int(year_s), int(a_s), int(b_s)
+            # ISO-like format: YYYY-A-B (with optional time)
+            iso_match = re.match(r'^(\d{4})-(\d{2})-(\d{2})', s)
+            if iso_match:
+                year = int(iso_match.group(1))
+                a = int(iso_match.group(2))  # Could be month or day
+                b = int(iso_match.group(3))  # Could be day or month
                 
-                # Unambiguous: a > 12 means a is definitely a day
-                if a > 12 and 1 <= b <= 12:
+                if getattr(self, '_is_xlsx_portal', False):
+                    # XLSX portal: Excel swapped the original MM/DD to YYYY-DD-MM.
+                    # Swap back: a=day, b=month → date(year, month=b, day=a)
                     try:
                         return date_cls(year, b, a)
                     except ValueError:
-                        pass
-                
-                # Ambiguous: both <= 12 — default to YYYY-MM-DD,
-                # but if result is in the future, try YYYY-DD-MM
-                if a <= 12 and b <= 12 and a != b:
-                    default_date = date_cls(year, a, b)  # YYYY-MM-DD
-                    if default_date > today:
-                        # Try swapping: YYYY-DD-MM
-                        try:
-                            swapped = date_cls(year, b, a)
-                            if swapped <= today:
-                                return swapped
-                        except ValueError:
-                            pass
-                    return default_date
+                        # If swap fails (e.g. b > 12), use as-is
+                        return date_cls(year, a, b)
+                else:
+                    # CSV / other sources: treat as genuine YYYY-MM-DD
+                    return date_cls(year, a, b)
             
-            # Default parse for any other format
+            # Slash-separated: MM/DD/YYYY — US format, dayfirst=False
+            if '/' in s:
+                return parse(s, dayfirst=False).date()
+            
+            # Everything else (DD-Mon-YYYY, etc.) — default parse
             return parse(s, dayfirst=False).date()
         except Exception:
             return None

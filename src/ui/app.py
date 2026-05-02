@@ -665,6 +665,89 @@ def render_cash_register_step(session_db, is_unlocked):
                     st.rerun()
 
 
+# ── Data Coverage Helper ─────────────────────────────────
+
+def get_data_coverage(session_db):
+    """
+    Query the DB for the earliest and latest date covered by each import source.
+    Returns a list of dicts with keys: source, label, earliest, latest, count.
+    """
+    from sqlalchemy import func
+    from src.models.cash_register import CashRegisterEntry
+    from src.models.expenses import Expense
+
+    sources = []
+
+    # CRM Sales (PaymentEvents from CRM)
+    q = session_db.query(
+        func.min(PaymentEvent.payment_date),
+        func.max(PaymentEvent.payment_date),
+        func.count(PaymentEvent.id)
+    ).filter(PaymentEvent.source == 'crm').one()
+    sources.append({'source': 'crm_sales', 'label': 'CRM Sales',
+                    'earliest': q[0], 'latest': q[1], 'count': q[2]})
+
+    # CRM Orders (Order records)
+    q = session_db.query(
+        func.min(Order.order_date),
+        func.max(Order.order_date),
+        func.count(Order.id)
+    ).one()
+    sources.append({'source': 'crm_orders', 'label': 'CRM Orders',
+                    'earliest': q[0], 'latest': q[1], 'count': q[2]})
+
+    # CRM Delivery (DeliveryEvents from CRM)
+    q = session_db.query(
+        func.min(DeliveryEvent.delivery_date),
+        func.max(DeliveryEvent.delivery_date),
+        func.count(DeliveryEvent.id)
+    ).filter(DeliveryEvent.source == 'crm').one()
+    sources.append({'source': 'crm_delivery', 'label': 'CRM Delivery',
+                    'earliest': q[0], 'latest': q[1], 'count': q[2]})
+
+    # MSWIPE (PaymentEvents from mswipe)
+    q = session_db.query(
+        func.min(PaymentEvent.payment_date),
+        func.max(PaymentEvent.payment_date),
+        func.count(PaymentEvent.id)
+    ).filter(PaymentEvent.source == 'mswipe').one()
+    sources.append({'source': 'mswipe', 'label': 'MSWIPE',
+                    'earliest': q[0], 'latest': q[1], 'count': q[2]})
+
+    # Notepad (DeliveryEvents from notepad)
+    q = session_db.query(
+        func.min(DeliveryEvent.delivery_date),
+        func.max(DeliveryEvent.delivery_date),
+        func.count(DeliveryEvent.id)
+    ).filter(DeliveryEvent.source == 'notepad').one()
+    sources.append({'source': 'notepad', 'label': 'Runner Notepad',
+                    'earliest': q[0], 'latest': q[1], 'count': q[2]})
+
+    # Cash Register — show last non-zero entry before today (ignores future template rows)
+    today = date.today()
+    q_cr_earliest = session_db.query(func.min(CashRegisterEntry.entry_date)).scalar()
+    q_cr_latest = session_db.query(
+        func.max(CashRegisterEntry.entry_date)
+    ).filter(
+        CashRegisterEntry.entry_date <= today,
+        CashRegisterEntry.derived_cash_from_orders > 0
+    ).scalar()
+    q_cr_count = session_db.query(func.count(CashRegisterEntry.id)).scalar()
+    sources.append({'source': 'cash_register', 'label': 'Cash Register',
+                    'earliest': q_cr_earliest, 'latest': q_cr_latest, 'count': q_cr_count})
+
+    # Expenses
+    q = session_db.query(
+        func.min(Expense.expense_date),
+        func.max(Expense.expense_date),
+        func.count(Expense.id)
+    ).one()
+    sources.append({'source': 'expenses', 'label': 'Expenses',
+                    'earliest': q[0], 'latest': q[1], 'count': q[2]})
+
+    return sources
+
+
 # ── Page: Import Wizard ───────────────────────────────────
 
 def page_import(session_db):
@@ -703,7 +786,53 @@ def page_import(session_db):
 
     st.divider()
 
+    # ── Data Coverage Panel ───────────────────────────────────
+    with st.expander("📊 Data Coverage — What's already in the DB", expanded=True):
+        try:
+            coverage = get_data_coverage(session_db)
+            today = date.today()
+            rows = []
+            for s in coverage:
+                earliest = str(s['earliest']) if s['earliest'] else '—'
+                latest   = str(s['latest'])   if s['latest']   else '—'
+                count    = s['count']
+                if s['latest']:
+                    days_ago = (today - s['latest']).days
+                    gap = f"{days_ago}d ago" if days_ago > 0 else "Today"
+                    status = '🔴' if days_ago > 14 else ('🟡' if days_ago > 7 else '🟢')
+                else:
+                    gap = 'No data'
+                    status = '⚫'
+                rows.append({
+                    '': status,
+                    'Source': s['label'],
+                    'Earliest': earliest,
+                    'Latest': latest,
+                    'Records': count,
+                    'Last Import': gap,
+                })
+            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+            st.caption("🟢 Up to date  🟡 1–2 weeks old  🔴 Older than 2 weeks  ⚫ No data imported")
+
+            # Identify any source lagging behind the most advanced source
+            sources_with_data = [s for s in coverage if s['latest']]
+            if sources_with_data:
+                max_latest = max(s['latest'] for s in sources_with_data)
+                lagging = [s for s in sources_with_data if (max_latest - s['latest']).days > 3]
+                if lagging:
+                    lagging_names = ', '.join(s['label'] for s in lagging)
+                    st.warning(f"⚠️ These sources are lagging behind: **{lagging_names}** — consider re-importing up to **{max_latest}**")
+                else:
+                    st.success("✅ All sources are in sync.")
+            else:
+                st.info("No data has been imported yet. Start with Step 1: CRM Sales Report.")
+        except Exception as e:
+            st.info(f"Could not load coverage data: {e}")
+
+    st.divider()
+
     sales_done = st.session_state.imports['crm_sales']['done']
+
 
     # Step 1: CRM Sales Report (required first)
     render_import_step(
@@ -729,9 +858,8 @@ def page_import(session_db):
     # Step 4: MSWIPE Transactions
     render_import_step(
         4, "MSWIPE Transactions",
-        "Card/UPI payment terminal data for cross-validation.",
-        'mswipe', MSwipeImporter, session_db, is_unlocked=sales_done,
-        suffix=".csv"
+        "Card/UPI payment terminal data for cross-validation. Supports both CSV (settlement report) and XLSX (transaction report).",
+        'mswipe', MSwipeImporter, session_db, is_unlocked=sales_done
     )
 
     # Step 5: Runner Notepad — dual mode

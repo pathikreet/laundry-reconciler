@@ -151,7 +151,22 @@ class CashRegisterImporter(BaseImporter):
         return normalized_data
 
     def validate(self, data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        return data
+        today = date.today()
+        valid = []
+        skipped = 0
+        for row in data:
+            entry_date = row.get('entry_date')
+            closing = row.get('closing_balance', 0) or 0
+            # Skip future-dated rows that have zero closing balance.
+            # These are template/placeholder rows in the annual register spreadsheet
+            # that haven't been filled in yet.
+            if entry_date and entry_date > today and closing == 0:
+                skipped += 1
+                continue
+            valid.append(row)
+        if skipped:
+            logger.info("Skipped %d future-dated zero-balance cash register rows", skipped)
+        return valid
 
     def save(self, data: List[Dict[str, Any]]) -> None:
         for row in data:

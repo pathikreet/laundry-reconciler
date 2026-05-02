@@ -23,9 +23,12 @@ class ExpensesImporter(BaseImporter):
 
     def import_data(self, file_path: str, **kwargs) -> List[Dict[str, Any]]:
         if file_path.endswith('.csv'):
-            df = pd.read_csv(file_path)
+            df = pd.read_csv(file_path, parse_dates=False)
         else:
-            df = read_excel_auto(file_path)
+            # parse_dates=False keeps date columns as raw strings/numbers so
+            # we can parse them ourselves with dayfirst=True, avoiding the
+            # pandas default of dayfirst=False which mis-parses DD-MM-YYYY as MM-DD-YYYY.
+            df = read_excel_auto(file_path, parse_dates=False)
         df = df.where(pd.notnull(df), None)
         return [sanitize_raw_data(row) for row in df.to_dict(orient='records')]
 
@@ -140,15 +143,30 @@ class ExpensesImporter(BaseImporter):
             self.db.add(expense)
 
     def _parse_date(self, date_str: Any) -> Optional[Any]:
+        import re
+        from datetime import date as _date
         if date_str is None or (isinstance(date_str, float) and pd.isna(date_str)) or str(date_str).strip() == '':
             return None
-        # Handle pandas Timestamp / datetime objects directly
-        if hasattr(date_str, 'date'):
-            return date_str.date()
+        # Excel stores dates as serial integers (days since 1899-12-30)
+        if isinstance(date_str, (int, float)):
+            try:
+                return (pd.Timestamp('1899-12-30') + pd.Timedelta(days=int(date_str))).date()
+            except Exception:
+                return None
+        s = str(date_str).strip()
+        # ISO format: YYYY-MM-DD (with optional time) — parse directly, no ambiguity
+        iso_match = re.match(r'^(\d{4})-(\d{2})-(\d{2})', s)
+        if iso_match:
+            try:
+                return _date(int(iso_match.group(1)), int(iso_match.group(2)), int(iso_match.group(3)))
+            except Exception:
+                pass
+        # Non-ISO (DD-MM-YYYY, DD/MM/YYYY, etc.) — use dayfirst=True
         try:
-            return parse(str(date_str), dayfirst=True).date()
+            return parse(s, dayfirst=True).date()
         except Exception:
             return None
+
 
     def _parse_amount(self, amount: Any) -> float:
         if amount is None or (isinstance(amount, float) and pd.isna(amount)) or str(amount).strip() == '':
