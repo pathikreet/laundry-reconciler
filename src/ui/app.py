@@ -1376,7 +1376,9 @@ def page_results(session_db):
             date_label = f"{start_dt.strftime('%b %d, %Y')} - {end_dt.strftime('%b %d, %Y')}"
 
         if not selected_runs:
-            st.warning(f"No reconciliation runs found between {start_dt} and {end_dt}.")
+            st.info(f"No reconciliation runs found between {start_dt} and {end_dt}.")
+            st.button("▶️ Go to Run Reconciliation", type="primary", key="nav_to_recon_empty_range",
+                      on_click=navigate_to, args=("Run Reconciliation",))
             return
 
     st.divider()
@@ -1860,7 +1862,7 @@ def page_order_lookup(session_db):
         return
 
     if not query:
-        st.warning("Please enter an order number to search.")
+        st.info("Please enter an order number to search.")
         return
 
     # ── Find matching orders (exact first, then partial) ──
@@ -2180,14 +2182,14 @@ def page_order_lookup(session_db):
 # ── Main App ──────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="Digital Accountant",
+    page_title="Laundry Reconciler",
     page_icon="🧺",
     layout="wide"
 )
 
 load_css()
 
-st.title("🧺 Digital Accountant")
+st.title("🧺 Laundry Reconciler")
 
 # Sidebar navigation
 st.sidebar.title("Navigation")
