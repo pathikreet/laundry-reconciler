@@ -449,7 +449,7 @@ def render_notepad_step(session_db, is_unlocked):
                             break
                     if all_ok:
                         st.session_state.imports['notepad'] = {'done': True, 'result': total_res}
-                        st.success(f"✅ All {len(uploaded_files)} Notepad file(s) imported!")
+                        st.toast(f"✅ All {len(uploaded_files)} Notepad file(s) imported!")
                         st.rerun()
 
     # ── Tab 2: Manual Entry ──
@@ -460,17 +460,17 @@ def render_notepad_step(session_db, is_unlocked):
         with st.expander("➕ Add Order Details", expanded=len(st.session_state.notepad_entries) == 0):
             col1, col2 = st.columns(2)
             with col1:
-                entry_date = st.date_input("Delivery Date", value=date.today(), key="np_date")
+                entry_date = st.date_input("Delivery Date *", value=date.today(), key="np_date", help="Required field")
                 entry_customer = st.text_input("Customer Name (optional)", key="np_customer")
-                entry_order = st.text_input("Order Number", key="np_order",
-                                           placeholder="e.g. T697")
-                entry_runner = st.text_input("Runner Name", key="np_runner")
+                entry_order = st.text_input("Order Number *", key="np_order",
+                                           placeholder="e.g. T697", help="Required field")
+                entry_runner = st.text_input("Runner Name (optional)", key="np_runner")
             with col2:
-                entry_amount = st.number_input("Amount Collected (₹)", min_value=0.0,
-                                              step=10.0, key="np_amount")
-                entry_mode = st.selectbox("Payment Mode", 
+                entry_amount = st.number_input("Amount Collected (₹) *", min_value=0.0,
+                                              step=10.0, key="np_amount", help="Required field")
+                entry_mode = st.selectbox("Payment Mode *",
                                          ["Cash", "Google Pay", "Paytm", "Package", "Card", "Other"],
-                                         key="np_mode")
+                                         key="np_mode", help="Required field")
                 entry_notes = st.text_area("Notes (optional)", key="np_notes",
                                           placeholder="Any remarks...", height=68)
 
@@ -487,7 +487,7 @@ def render_notepad_step(session_db, is_unlocked):
                         'runner_name': entry_runner,
                         'notes': entry_notes,
                     })
-                    st.success(f"Added entry for {entry_customer or entry_order}")
+                    st.toast(f"✅ Added entry for {entry_customer or entry_order}")
                     st.rerun()
 
         # ── Show queued entries ──
@@ -565,7 +565,7 @@ def render_notepad_step(session_db, is_unlocked):
                                 'result': {'total': saved, 'imported': saved, 'errors': 0}
                             }
                             st.session_state.notepad_entries = []
-                            st.success(f"✅ Saved {saved} entries!")
+                            st.toast(f"✅ Saved {saved} entries!")
                             st.rerun()
                         except Exception as ex:
                             session_db.rollback()
@@ -1695,7 +1695,7 @@ def page_results(session_db):
                         ex_obj.resolution_note = note
                         ex_obj.resolved_at = datetime.utcnow()
                         session_db.commit()
-                        st.success(f"Exception {sel_id} marked as '{resolution}'")
+                        st.toast(f"✅ Exception {sel_id} marked as '{resolution}'")
                         st.rerun()
             else:
                 st.info("No exceptions match the selected filters.")
@@ -2173,21 +2173,21 @@ def page_order_lookup(session_db):
                             e.resolution_note = note
                             e.resolved_at = datetime.utcnow()
                             session_db.commit()
-                            st.success(f"Exception {e.id} marked as '{resolution}'")
+                            st.toast(f"✅ Exception {e.id} marked as '{resolution}'")
                             st.rerun()
 
 
 # ── Main App ──────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="Digital Accountant",
+    page_title="Laundry Reconciler",
     page_icon="🧺",
     layout="wide"
 )
 
 load_css()
 
-st.title("🧺 Digital Accountant")
+st.title("🧺 Laundry Reconciler")
 
 # Sidebar navigation
 st.sidebar.title("Navigation")

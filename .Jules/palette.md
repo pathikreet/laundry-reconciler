@@ -13,3 +13,7 @@
 ## 2026-03-21 - Navigation Empty States and Streamlit Callbacks
 **Learning:** Empty states with "dead-end" warning messages create friction. Providing a direct Call-to-Action (CTA) button to the next logical step (e.g., navigating to a data generation page) significantly improves flow. However, in Streamlit, directly mutating a widget's session state (like a sidebar navigation radio) *after* it has been rendered causes a fatal `StreamlitAPIException`. Navigation must be handled via `on_click` callbacks attached to buttons, rather than inline state mutation followed by `st.rerun()`.
 **Action:** Replace dead-end warnings with `st.info` and a primary CTA button. Implement programmatic navigation using `on_click=navigate_to_callback` instead of setting `st.session_state` directly.
+
+## 2026-05-06 - Explicitly mark required fields and use st.toast for disappearing messages
+**Learning:** Streamlit forms lack native styling to indicate required fields to screen readers or visual users. Additionally, using `st.success` immediately before `st.rerun` causes the message to flash and disappear, frustrating users. `st.toast` provides non-blocking, transient notifications that persist appropriately across reruns.
+**Action:** Add `*` to the labels of required inputs and use the `help` parameter to define it explicitly. Use `st.toast` instead of `st.success` for notifications preceding a rerun.
