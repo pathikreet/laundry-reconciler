@@ -100,6 +100,8 @@ class ExcelExporter:
             reconciliation_run_id=run.id).scalar() or 0
         high = self.db.query(func.count(OrderException.id)).filter_by(
             reconciliation_run_id=run.id, severity='high').scalar() or 0
+
+        # GPay/UPI/Card — fraud vector (staff-marked)
         crm_gpay = float(self.db.query(func.sum(PaymentEvent.amount)).filter(
             PaymentEvent.source == 'crm', PaymentEvent.payment_mode.in_(['GPay', 'Google Pay', 'UPI']),
             PaymentEvent.payment_date == run.run_date).scalar() or 0)
@@ -107,10 +109,44 @@ class ExcelExporter:
             PaymentEvent.source == 'mswipe',
             PaymentEvent.payment_date == run.run_date).scalar() or 0)
 
+        # Paytm QR — auto-recorded, not fraud
+        paytm = float(self.db.query(func.sum(PaymentEvent.amount)).filter(
+            PaymentEvent.source == 'paytm',
+            PaymentEvent.payment_date == run.run_date).scalar() or 0)
+
+        # Cash — fraud vector
+        crm_cash = float(self.db.query(func.sum(PaymentEvent.amount)).filter(
+            PaymentEvent.source == 'crm', PaymentEvent.payment_mode == 'Cash',
+            PaymentEvent.payment_date == run.run_date).scalar() or 0)
+        register_entry = self.db.query(CashRegisterEntry).filter(
+            CashRegisterEntry.entry_date == run.run_date).first()
+        register_cash = float(register_entry.derived_cash_from_orders or 0) if register_entry else 0
+
+        # Package adjustments
+        from src.models.package_transaction import PackageTransaction
+        pkg_cash = float(self.db.query(func.sum(PackageTransaction.amount)).filter(
+            PackageTransaction.transaction_date == run.run_date,
+            PackageTransaction.payment_mode == 'Cash').scalar() or 0)
+        pkg_online = float(self.db.query(func.sum(PackageTransaction.amount)).filter(
+            PackageTransaction.transaction_date == run.run_date,
+            PackageTransaction.payment_mode == 'Online').scalar() or 0)
+
         data = [{'Run Date': run.run_date, 'Status': run.status,
                  'Total Exceptions': total_ex, 'High Severity': high,
-                 'CRM GPay': round(crm_gpay, 2), 'MSWIPE Total': round(mswipe, 2),
-                 'GPay Variance': round(crm_gpay - mswipe, 2)}]
+                 # Fraud vectors
+                 'CRM GPay (staff)': round(crm_gpay, 2),
+                 'MSWIPE': round(mswipe, 2),
+                 'Pkg Online Adj': round(pkg_online, 2),
+                 'MSWIPE (adj)': round(mswipe - pkg_online, 2),
+                 'Online Fraud Gap': round(crm_gpay - (mswipe - pkg_online), 2),
+                 'CRM Cash (staff)': round(crm_cash, 2),
+                 'Register Cash': round(register_cash, 2),
+                 'Pkg Cash Adj': round(pkg_cash, 2),
+                 'Register (adj)': round(register_cash - pkg_cash, 2),
+                 'Cash Fraud Gap': round(crm_cash - (register_cash - pkg_cash), 2),
+                 # Auto-recorded (safe)
+                 'Paytm QR (auto)': round(paytm, 2),
+                 }]
         pd.DataFrame(data).to_excel(writer, sheet_name='Daily_Summary', index=False)
 
     def _write_audit_log(self, writer, run):

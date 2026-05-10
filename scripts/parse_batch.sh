@@ -1,8 +1,87 @@
 #!/bin/bash
 
+# ── Help / Usage ──────────────────────────────────────────
+show_help() {
+    cat << 'EOF'
+USAGE
+    ./scripts/parse_batch.sh <path>
+    ./scripts/parse_batch.sh --help
+
+DESCRIPTION
+    Converts handwritten runner delivery notepad photos into structured CSV
+    files using Gemini AI OCR. Supports single files or entire directories.
+
+    Each image is sent to Gemini CLI (via the /tumbledry:parse custom command),
+    which reads the handwriting and returns structured CSV rows. Rows are then
+    routed to month-specific output files based on the parsed date (column 5).
+
+ARGUMENTS
+    <path>      Path to a single image file (.jpg, .jpeg, .png) or a directory
+                containing image files. When a directory is given, all image
+                files inside it are processed.
+
+    --help      Show this help message and exit.
+
+OPTIONS
+    The script has no additional flags. Behavior is determined by the input:
+
+    Single file:    ./scripts/parse_batch.sh /path/to/notepad_page.jpg
+    Directory:      ./scripts/parse_batch.sh /path/to/notepad_photos/
+
+OUTPUT
+    CSV files are written to the CURRENT WORKING DIRECTORY:
+
+        Delivery_notes_January_2026.csv     Entries dated in January 2026
+        Delivery_notes_February_2026.csv    Entries dated in February 2026
+        ...                                 (one file per month+year)
+        Delivery_notes_Unsorted.csv         Rows where the date could not be parsed
+
+    Tip: Run from a dedicated output folder to keep files organized:
+        cd data/notepad_csvs && ../../scripts/parse_batch.sh /path/to/photos/
+
+IDEMPOTENCY
+    The script tracks processed files in a hidden state file
+    (.processed_images.log) in the image source directory. Re-running skips
+    already-processed images. Delete the state file to force reprocessing.
+
+PREREQUISITES
+    1. Gemini CLI installed and authenticated:
+         npm install -g @google/gemini-cli
+         gemini auth login
+
+    2. Custom /tumbledry:parse command registered:
+         mkdir -p ~/.gemini/commands/tumbledry
+         cp scripts/commands/parse.toml ~/.gemini/commands/tumbledry/parse.toml
+
+    3. Image files in .jpg, .jpeg, or .png format.
+
+EXAMPLES
+    # Parse a single photo
+    ./scripts/parse_batch.sh ~/photos/notepad_nov_01.jpg
+
+    # Parse all photos in a folder
+    ./scripts/parse_batch.sh ~/photos/november/
+
+    # Parse into a dedicated output directory
+    cd data/notepad_csvs
+    ../../scripts/parse_batch.sh ~/photos/november/
+
+EXIT CODES
+    0   Success (or no new files to process)
+    1   Invalid arguments or input path
+EOF
+    exit 0
+}
+
+# Check for --help flag
+if [ "$1" = "--help" ] || [ "$1" = "-h" ]; then
+    show_help
+fi
+
 # 1. Check if the user provided a path
 if [ -z "$1" ]; then
-    echo "Usage: ./parse_batch.sh <path_to_image_file_OR_directory>"
+    echo "Usage: ./scripts/parse_batch.sh <path_to_image_file_OR_directory>"
+    echo "       ./scripts/parse_batch.sh --help    Show detailed usage guide"
     exit 1
 fi
 

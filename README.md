@@ -123,21 +123,67 @@ Opens a browser at `http://localhost:8501` with:
 
 ### Command-Line Interface
 
+> **Note:** Always use `python -m src.cli` (not `python src/cli.py`). The `-m` flag ensures proper module resolution.
+
+#### Quick Reference
+
 ```bash
-# Import data (recommended order: Sales → Orders → Delivery → others)
+python -m src.cli --help                    # Show all commands
+python -m src.cli <command> --help          # Show help for a specific command
+```
+
+#### Commands
+
+| Command | Description | Arguments | File Types |
+|---------|-------------|-----------|------------|
+| `init-db` | Initialize or reset the database | — | — |
+| `import-crm` | Import CRM Sales & payment transactions | `<file>` | `.csv`, `.xlsx`, `.xls` |
+| `import-crm-orders` | Import CRM Orders (authoritative Net Amount) | `<file>` | `.csv`, `.xlsx`, `.xls` |
+| `import-crm-delivery` | Import CRM Delivery dates & piece counts | `<file>` | `.csv`, `.xlsx`, `.xls` |
+| `import-mswipe` | Import MSWIPE card/UPI terminal data | `<file>` | `.csv`, `.xlsx`, `.xls` |
+| `import-notepad` | Import runner delivery notepad | `<file>` | `.csv`, `.xlsx`, `.xls` |
+| `import-cash` | Import cash register closing balances | `<file> [--year YYYY]` | `.xlsx`, `.xls` |
+| `import-expenses` | Import business expenses | `<file>` | `.csv`, `.xlsx`, `.xls` |
+| `reconcile` | Run matching + reconciliation for a date | `<YYYY-MM-DD> [--export]` | — |
+
+#### Import Examples (Recommended Order)
+
+```bash
+# 1. CRM Reports (Sales must be first)
 python -m src.cli import-crm path/to/sales.xlsx
 python -m src.cli import-crm-orders path/to/orders.xlsx
 python -m src.cli import-crm-delivery path/to/delivery.xlsx
-python -m src.cli import-mswipe path/to/mswipe.csv
-python -m src.cli import-notepad path/to/notepad.xlsx
-python -m src.cli import-cash path/to/register.xlsx --year 2025
 
-# Run reconciliation
-python -m src.cli reconcile 2025-11-15
-python -m src.cli reconcile 2025-11-15 --export
+# 2. Payment Sources
+python -m src.cli import-mswipe path/to/mswipe.csv          # CSV settlement report
+python -m src.cli import-mswipe path/to/transactions.xlsx    # XLSX transaction report (also supported)
+
+# 3. Runner Notepad
+python -m src.cli import-notepad path/to/notepad.csv
+
+# 4. Cash & Expenses
+python -m src.cli import-cash path/to/register.xlsx --year 2026
+python -m src.cli import-expenses path/to/expenses.xlsx
 ```
 
-> **Note:** Use `python -m src.cli` (not `python src/cli.py`). The `-m` flag ensures proper module resolution.
+#### Reconciliation
+
+```bash
+# Run reconciliation for a specific date
+python -m src.cli reconcile 2026-03-15
+
+# Run and export to Excel report
+python -m src.cli reconcile 2026-03-15 --export
+# → Writes: reconciliation_report_2026-03-15.xlsx
+```
+
+#### File Validation
+
+All import commands enforce:
+- **Extension whitelist** — only the file types listed above are accepted
+- **Size limit** — maximum 50 MB per file
+- **Path traversal prevention** — no `../` tricks
+
 
 ---
 

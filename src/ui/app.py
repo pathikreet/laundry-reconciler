@@ -8,6 +8,7 @@ import streamlit as st
 import pandas as pd
 import os
 import sys
+import io
 import tempfile
 import logging
 
@@ -84,7 +85,8 @@ EXCEPTION_DESCRIPTIONS = {
         'Indicates payment was collected or entered late.'
     ),
     'CashUndeposited': (
-        '🚨 Day-level: CRM shows cash received for the day, but the Cash Register has no matching deposit. '
+        '🚨 Day-level: CRM shows cash received for the day, but the Cash Register (adjusted for '
+        'package cash purchases) has no matching deposit. '
         'Independent of the Notepad — fires even if the runner skipped the notepad entry. '
         'Potential indicator of pocketing/fraud.'
     ),
@@ -101,8 +103,16 @@ EXCEPTION_DESCRIPTIONS = {
         'Either the register was not imported for that date, or the cash was never deposited.'
     ),
     'PaymentNotConfirmedByNotepad': (
-        '📋 CRM records an Online/Paytm/Package/Card payment, but the Runner Notepad has no corresponding entry. '
+        '📋 CRM records an Online/Card payment (staff-entered), but the Runner Notepad has no corresponding entry. '
         'Low severity — the runner may have simply omitted the note.'
+    ),
+    'PaytmNotInQRData': (
+        '📱 CRM auto-recorded a Paytm payment, but no matching transaction found in the Paytm QR data. '
+        'Not a fraud risk — Paytm is auto-recorded. Likely a timing or data sync issue.'
+    ),
+    'PackageNotConfirmedByNotepad': (
+        '📦 CRM auto-deducted a Package wallet payment, but the Runner Notepad has no delivery/payment entry '
+        'for this order with Package mode. Not a fraud risk — runner may have omitted the note.'
     ),
     'AgeingOrder': (
         '⏰ Order was placed more than the configured ageing threshold days ago with no delivery recorded from any source. '
@@ -219,6 +229,7 @@ def init_import_state():
             'notepad': {'done': False, 'result': None},
             'cash_register': {'done': False, 'result': None},
             'expenses': {'done': False, 'result': None},
+            'paytm': {'done': False, 'result': None},
         }
 
 
@@ -875,6 +886,14 @@ def page_import(session_db):
         'expenses', ExpensesImporter, session_db, is_unlocked=sales_done
     )
 
+    # Step 8: Paytm Transactions
+    from src.importers.paytm import PaytmImporter
+    render_import_step(
+        8, "Company Paytm QR",
+        "Payments received via the company Paytm QR code. These are online payments alongside MSWIPE.",
+        'paytm', PaytmImporter, session_db, is_unlocked=sales_done
+    )
+
 
 # ── Page: Run Reconciliation ──────────────────────────────
 
@@ -1385,10 +1404,16 @@ def page_results(session_db):
     all_exceptions = session_db.query(OrderException).filter(
         OrderException.reconciliation_run_id.in_(run_ids)).all()
 
-    # Deduplicate exceptions by (order_id, exception_type) — keep latest
+    # Deduplicate exceptions:
+    # - Order-level: by (order_id, exception_type) — keep latest per order+type
+    # - Day-level (order_id is None): by (run_id, exception_type) — keep each day's exception
     seen_ex = {}
     for e in all_exceptions:
-        key = (e.order_id, e.exception_type)
+        if e.order_id is not None:
+            key = (e.order_id, e.exception_type)
+        else:
+            # Day-level exceptions: each run (= each day) is distinct
+            key = (f"run_{e.reconciliation_run_id}", e.exception_type)
         if key not in seen_ex or (e.id > seen_ex[key].id):
             seen_ex[key] = e
     exceptions = list(seen_ex.values())
@@ -1449,8 +1474,7 @@ def page_results(session_db):
                 fraud_rows.append({
                     'Date': str(run_date_map.get(e.reconciliation_run_id, '—')),
                     'CRM Cash': f"₹{ev.get('crm_cash_total', 0):,.0f}",
-                    'Register': f"₹{ev.get('register_cash_total', 0):,.0f}",
-                    'Expenses': f"₹{ev.get('cash_expenses', 0):,.0f}",
+                    'Register Derived': f"₹{ev.get('register_derived_cash', ev.get('register_cash_total', 0)):,.0f}",
                     'Gap': f"₹{ev.get('undeposited_amount', ev.get('diff', 0)):,.0f}",
                 })
             st.dataframe(pd.DataFrame(fraud_rows), width='stretch', hide_index=True)
@@ -1583,30 +1607,699 @@ def page_results(session_db):
             else:
                 st.success("No exceptions!")
         st.divider()
-        st.subheader("💰 Payment Summary")
+        st.subheader("💰 Grand Payment Summary — CRM vs Actuals")
+        st.caption("Side-by-side comparison of what CRM says was collected vs what was actually received.")
+
         crm_payments_list = [p for p in day_payments if p.source == 'crm']
         mswipe_payments_list = [p for p in day_payments if p.source == 'mswipe']
+        paytm_payments_list = [p for p in day_payments if p.source == 'paytm']
+        notepad_payments_list = [p for p in day_payments if p.source == 'notepad']
+
+        # ── CRM totals by mode ──
         crm_by_mode = {}
         for p in crm_payments_list:
             mode = p.payment_mode or 'Unknown'
             crm_by_mode[mode] = crm_by_mode.get(mode, 0) + float(p.amount)
         crm_total = sum(crm_by_mode.values())
+
+        # ── Actual totals ──
+        # Online: MSWIPE + Company Paytm
         mswipe_total = sum(float(p.amount) for p in mswipe_payments_list)
+        paytm_total = sum(float(p.amount) for p in paytm_payments_list)
+        online_actual_total = mswipe_total + paytm_total
         gpay_modes = {'Google Pay', 'GPay', 'UPI'}
         crm_gpay = sum(v for k, v in crm_by_mode.items() if k in gpay_modes)
-        col_p1, col_p2, col_p3 = st.columns(3)
-        col_p1.metric("CRM Total", f"₹{crm_total:,.0f}")
-        col_p2.metric("MSWIPE Total", f"₹{mswipe_total:,.0f}")
-        col_p3.metric("GPay Variance", f"₹{crm_gpay - mswipe_total:,.0f}",
-                      delta=f"₹{crm_gpay - mswipe_total:,.0f}",
-                      delta_color="inverse" if crm_gpay != mswipe_total else "off")
-        mode_icons = {'Cash': '💵', 'Google Pay': '💳', 'GPay': '💳', 'UPI': '💳', 'Paytm': '📱', 'Package': '📦', 'Card': '💳', 'Online': '🌐', 'Advance': '⏩', 'Due': '⏳'}
-        pay_rows = []
-        for mode in sorted(crm_by_mode.keys()):
-            icon = mode_icons.get(mode, '🔹')
-            pay_rows.append({'Mode': f"{icon} {mode}", 'CRM Amount': f"₹{crm_by_mode[mode]:,.0f}", 'Transactions': sum(1 for p in crm_payments_list if (p.payment_mode or 'Unknown') == mode)})
-        if pay_rows:
-            st.dataframe(pd.DataFrame(pay_rows), width='stretch', hide_index=True)
+        crm_paytm = sum(v for k, v in crm_by_mode.items() if k in ('Paytm', 'PhonePe'))
+
+        # Cash: actual = register derived_cash_from_orders total
+        from src.models.cash_register import CashRegisterEntry
+        from src.models.bank_deposit import BankDeposit
+        from src.models.package_transaction import PackageTransaction
+        from sqlalchemy import func as sa_func
+        register_cash_total = float(
+            session_db.query(sa_func.sum(CashRegisterEntry.derived_cash_from_orders)).filter(
+                CashRegisterEntry.entry_date.in_(run_dates),
+            ).scalar() or 0.0
+        )
+        # Bank deposits for the period
+        bank_deposit_total = float(
+            session_db.query(sa_func.sum(BankDeposit.amount)).filter(
+                BankDeposit.deposit_date.in_(run_dates),
+            ).scalar() or 0.0
+        )
+        # Cash expenses for the period
+        cash_expenses_total = float(
+            session_db.query(sa_func.sum(Expense.amount)).filter(
+                Expense.expense_date.in_(run_dates),
+                Expense.mode == 'Cash',
+            ).scalar() or 0.0
+        )
+
+        crm_cash = crm_by_mode.get('Cash', 0)
+        crm_package = crm_by_mode.get('Package', 0)
+
+        # ── Package purchase inflows (subtract from actuals) ──
+        pkg_cash_total = float(
+            session_db.query(sa_func.sum(PackageTransaction.amount)).filter(
+                PackageTransaction.transaction_date.in_(run_dates),
+                PackageTransaction.payment_mode == 'Cash',
+            ).scalar() or 0.0
+        )
+        pkg_online_total = float(
+            session_db.query(sa_func.sum(PackageTransaction.amount)).filter(
+                PackageTransaction.transaction_date.in_(run_dates),
+                PackageTransaction.payment_mode == 'Online',
+            ).scalar() or 0.0
+        )
+        pkg_total = pkg_cash_total + pkg_online_total
+
+        # Adjusted actuals (orders only, packages subtracted)
+        register_orders_only = register_cash_total - pkg_cash_total
+        online_orders_only = online_actual_total - pkg_online_total
+
+        # ── Outstanding orders (30+ days old, balance > 0, IN RANGE) ──
+        from datetime import timedelta
+        if run_dates:
+            earliest_date = min(run_dates)
+            latest_date = max(run_dates)
+            cutoff_30d = latest_date - timedelta(days=30)
+            outstanding_orders = session_db.query(Order).filter(
+                Order.order_date >= earliest_date,
+                Order.order_date <= cutoff_30d,
+                Order.balance > 0,
+            ).all()
+            outstanding_total = sum(float(o.balance) for o in outstanding_orders)
+            outstanding_count = len(outstanding_orders)
+        else:
+            outstanding_total = 0.0
+            outstanding_count = 0
+            outstanding_orders = []
+
+        # ── Header metrics ──
+        # FRAUD VECTORS: Cash, GPay/UPI, Card — staff can manually mark
+        # these in CRM. Verified against Register (cash) and MSWIPE (online).
+        # SAFE (auto-recorded): Paytm (QR scan), Package (wallet deduction).
+        cash_gap = crm_cash - register_orders_only
+
+        # GPay/UPI/Card: staff-entered → verify against MSWIPE
+        crm_gpay_card = crm_gpay  # GPay/UPI modes
+        crm_card = sum(v for k, v in crm_by_mode.items() if k in ('Card',))
+        crm_staff_online = crm_gpay_card + crm_card  # all staff-entered online
+        # Paytm: auto-recorded in CRM — separate from fraud analysis
+        crm_paytm_auto = crm_paytm  # Paytm/PhonePe modes auto-entered
+
+        # MSWIPE covers GPay/UPI/Card actuals (NOT Paytm — that's separate)
+        mswipe_orders_only = mswipe_total - pkg_online_total
+        online_fraud_gap = crm_staff_online - mswipe_orders_only
+
+        # Paytm recon: CRM Paytm vs Paytm QR data (informational only)
+        paytm_recon_gap = crm_paytm_auto - paytm_total
+
+        total_fraud_gap = cash_gap + online_fraud_gap
+
+        col_h1, col_h2, col_h3, col_h4 = st.columns(4)
+        col_h1.metric(
+            "🚨 Cash Risk",
+            f"₹{cash_gap:,.0f}",
+            delta=f"CRM ₹{crm_cash:,.0f} vs Reg ₹{register_orders_only:,.0f}",
+            delta_color="inverse" if cash_gap > 100 else "off",
+        )
+        col_h2.metric(
+            "🚨 Online Risk",
+            f"₹{online_fraud_gap:,.0f}",
+            delta=f"CRM ₹{crm_staff_online:,.0f} vs MSWIPE ₹{mswipe_orders_only:,.0f}",
+            delta_color="inverse" if online_fraud_gap > 100 else "off",
+        )
+        col_h3.metric(
+            "🚨 Total Fraud Risk",
+            f"₹{total_fraud_gap:,.0f}",
+            delta=f"Cash ₹{cash_gap:,.0f} + Online ₹{online_fraud_gap:,.0f}",
+            delta_color="inverse" if total_fraud_gap > 100 else "off",
+        )
+        col_h4.metric(
+            "⚠️ Unpaid 30d+",
+            f"₹{outstanding_total:,.0f}",
+            delta=f"{outstanding_count} orders",
+            delta_color="inverse" if outstanding_count > 0 else "off",
+        )
+
+        # ── Side-by-side comparison table ──
+        st.markdown("##### 🚨 Fraud Vectors (staff can manually mark)")
+        fraud_rows = []
+
+        # Row 1: Cash
+        fraud_rows.append({
+            'Category': '💵 Cash',
+            'CRM (staff-marked)': f'₹{crm_cash:,.0f}',
+            'Actual': f'₹{register_orders_only:,.0f}',
+            'Actual Source': f'Register ₹{register_cash_total:,.0f} - Pkg ₹{pkg_cash_total:,.0f}',
+            'Gap': f'₹{cash_gap:,.0f}',
+            'Risk': '🔴' if cash_gap > 100 else ('🟡' if cash_gap < -100 else '✅'),
+        })
+
+        # Row 2: GPay/UPI/Card
+        fraud_rows.append({
+            'Category': '💳 GPay / UPI / Card',
+            'CRM (staff-marked)': f'₹{crm_staff_online:,.0f}',
+            'Actual': f'₹{mswipe_orders_only:,.0f}',
+            'Actual Source': f'MSWIPE ₹{mswipe_total:,.0f} - Pkg ₹{pkg_online_total:,.0f}',
+            'Gap': f'₹{online_fraud_gap:,.0f}',
+            'Risk': '🔴' if online_fraud_gap > 100 else ('🟡' if online_fraud_gap < -100 else '✅'),
+        })
+
+        # Row 3: Fraud total
+        fraud_rows.append({
+            'Category': '🚨 TOTAL FRAUD RISK',
+            'CRM (staff-marked)': f'₹{crm_cash + crm_staff_online:,.0f}',
+            'Actual': f'₹{register_orders_only + mswipe_orders_only:,.0f}',
+            'Actual Source': '',
+            'Gap': f'₹{total_fraud_gap:,.0f}',
+            'Risk': '🔴' if total_fraud_gap > 100 else '✅',
+        })
+
+        st.dataframe(pd.DataFrame(fraud_rows), width='stretch', hide_index=True)
+
+        # ── Safe channels ──
+        st.markdown("##### ✅ Auto-Recorded (no fraud possible)")
+        safe_rows = []
+
+        safe_rows.append({
+            'Category': '📱 Paytm (QR auto-recorded)',
+            'CRM (auto)': f'₹{crm_paytm_auto:,.0f}',
+            'Actual (QR data)': f'₹{paytm_total:,.0f}',
+            'Gap': f'₹{paytm_recon_gap:,.0f}',
+            'Note': 'System-to-system match',
+        })
+
+        safe_rows.append({
+            'Category': '📦 Package (wallet auto-deducted)',
+            'CRM (auto)': f'₹{crm_package:,.0f}',
+            'Actual (QR data)': f'Purchases: ₹{pkg_total:,.0f}',
+            'Gap': '—',
+            'Note': 'Wallet deduction, no cash movement',
+        })
+
+        st.dataframe(pd.DataFrame(safe_rows), width='stretch', hide_index=True)
+
+        # ── Callouts ──
+        if total_fraud_gap > 100:
+            st.error(
+                f"🚨 **₹{total_fraud_gap:,.0f} fraud risk** — "
+                f"Cash: ₹{cash_gap:,.0f} (CRM marked but not in register) · "
+                f"Online: ₹{online_fraud_gap:,.0f} (CRM marked GPay/UPI/Card "
+                f"but not in MSWIPE). Staff can manually mark these "
+                f"payment modes in CRM."
+            )
+        elif total_fraud_gap < -100:
+            st.warning(
+                f"🟡 Actuals exceed CRM by ₹{abs(total_fraud_gap):,.0f} — "
+                f"Register/MSWIPE received more than staff marked in CRM."
+            )
+        else:
+            st.success("✅ Staff-marked payments align with actuals (within tolerance).")
+
+        if abs(paytm_recon_gap) > 100:
+            st.info(
+                f"ℹ️ Paytm recon gap: ₹{paytm_recon_gap:,.0f} — "
+                f"difference between CRM auto-recorded Paytm and QR "
+                f"data. Not a fraud risk (both are system-generated)."
+            )
+
+        if outstanding_total > 100:
+            st.warning(
+                f"⚠️ **{outstanding_count} orders (₹{outstanding_total:,.0f}) "
+                f"unpaid 30+ days** — could be genuinely unpaid or "
+                f"staff collected cash but didn't mark it."
+            )
+
+        # ══════════════════════════════════════════════════════
+        # DRILL-DOWN: Online Variance → Orders (GPay/UPI/Card only)
+        # ══════════════════════════════════════════════════════
+        with st.expander(
+            f"💳 Drill Down: Online Fraud Gap (₹{online_fraud_gap:,.0f}) — GPay/UPI/Card vs MSWIPE",
+            expanded=False
+        ):
+            st.caption(
+                "Traces the GPay/UPI/Card gap to specific orders. "
+                "Staff can manually mark these modes in CRM. "
+                "Paytm is excluded (auto-recorded, no fraud risk)."
+            )
+
+            # CRM GPay/UPI/Card payments (staff-entered, fraud vector)
+            # Paytm excluded — auto-recorded, no fraud risk
+            fraud_online_modes = gpay_modes | {'Card'}
+            crm_online_payments = [
+                p for p in crm_payments_list
+                if (p.payment_mode or '') in fraud_online_modes
+            ]
+            # MSWIPE payments
+            mswipe_by_order = {}
+            mswipe_unmatched = []
+            for p in mswipe_payments_list:
+                if p.order_id:
+                    mswipe_by_order.setdefault(p.order_id, []).append(p)
+                else:
+                    mswipe_unmatched.append(p)
+
+            # Find CRM online payments where no MSWIPE exists for the same order
+            crm_unmatched = []
+            crm_matched_with_diff = []
+            for p in crm_online_payments:
+                if p.order_id and p.order_id in mswipe_by_order:
+                    # Has MSWIPE — check if amounts match
+                    mswipe_amt = sum(float(m.amount) for m in mswipe_by_order[p.order_id])
+                    crm_amt = float(p.amount)
+                    if abs(crm_amt - mswipe_amt) > 2:
+                        crm_matched_with_diff.append((p, crm_amt, mswipe_amt))
+                elif p.order_id and p.order_id not in mswipe_by_order:
+                    crm_unmatched.append(p)
+                elif not p.order_id:
+                    crm_unmatched.append(p)
+
+            # Section 1: CRM online with no MSWIPE
+            if crm_unmatched:
+                st.markdown(f"**🔴 {len(crm_unmatched)} CRM online payments with NO MSWIPE receipt** (₹{sum(float(p.amount) for p in crm_unmatched):,.0f})")
+                unmatched_rows = []
+                for p in sorted(crm_unmatched, key=lambda x: float(x.amount), reverse=True):
+                    order = session_db.get(Order, p.order_id) if p.order_id else None
+                    unmatched_rows.append({
+                        'Date': str(p.payment_date),
+                        'Order #': order.order_number if order else '—',
+                        'Customer': (order.customer_name or '—') if order else '—',
+                        'Mode': p.payment_mode,
+                        'CRM Amount': f"₹{float(p.amount):,.0f}",
+                        'MSWIPE': '❌ Missing',
+                    })
+                df_unmatched_online = pd.DataFrame(unmatched_rows)
+                st.dataframe(df_unmatched_online, width='stretch', hide_index=True)
+            else:
+                st.success("✅ All CRM online payments have matching MSWIPE receipts.")
+
+            # Section 2: MSWIPE with no CRM order
+            if mswipe_unmatched:
+                st.markdown(f"**🟡 {len(mswipe_unmatched)} MSWIPE transactions not linked to any CRM order** (₹{sum(float(p.amount) for p in mswipe_unmatched):,.0f})")
+                orphan_rows = []
+                for p in sorted(mswipe_unmatched, key=lambda x: float(x.amount), reverse=True)[:50]:
+                    orphan_rows.append({
+                        'Date': str(p.payment_date),
+                        'Amount': f"₹{float(p.amount):,.0f}",
+                        'Mode': p.payment_mode or '—',
+                        'Ref': (p.raw_data or {}).get('Txn ID', (p.raw_data or {}).get('txn_id', '—')),
+                    })
+                st.dataframe(pd.DataFrame(orphan_rows), width='stretch', hide_index=True)
+                if len(mswipe_unmatched) > 50:
+                    st.caption(f"Showing top 50 of {len(mswipe_unmatched)}")
+
+            # Section 3: Matched but amounts differ
+            if crm_matched_with_diff:
+                st.markdown(f"**🟡 {len(crm_matched_with_diff)} orders with CRM ≠ MSWIPE amount**")
+                diff_rows = []
+                for p, crm_amt, msw_amt in sorted(crm_matched_with_diff, key=lambda x: abs(x[1]-x[2]), reverse=True)[:30]:
+                    order = session_db.get(Order, p.order_id) if p.order_id else None
+                    diff_rows.append({
+                        'Order #': order.order_number if order else '—',
+                        'Customer': (order.customer_name or '—') if order else '—',
+                        'CRM Amount': f"₹{crm_amt:,.0f}",
+                        'MSWIPE Amount': f"₹{msw_amt:,.0f}",
+                        'Diff': f"₹{crm_amt - msw_amt:,.0f}",
+                    })
+                st.dataframe(pd.DataFrame(diff_rows), width='stretch', hide_index=True)
+
+            # ── Excel Export: Online drill-down ──
+            st.markdown("---")
+            buf_online = io.BytesIO()
+            with pd.ExcelWriter(buf_online, engine='xlsxwriter') as ew:
+                if crm_unmatched:
+                    pd.DataFrame(unmatched_rows).to_excel(ew, sheet_name='CRM_No_MSWIPE', index=False)
+                if mswipe_unmatched:
+                    pd.DataFrame(orphan_rows).to_excel(ew, sheet_name='MSWIPE_Unlinked', index=False)
+                if crm_matched_with_diff:
+                    pd.DataFrame(diff_rows).to_excel(ew, sheet_name='Amount_Mismatch', index=False)
+                # Add a summary sheet
+                pd.DataFrame([{
+                    'Period': f"{earliest_date} to {latest_date}",
+                    'CRM GPay/UPI/Card': f"{crm_staff_online:,.0f}",
+                    'MSWIPE (adj)': f"{mswipe_orders_only:,.0f}",
+                    'Online Fraud Gap': f"{online_fraud_gap:,.0f}",
+                    'CRM No MSWIPE Count': len(crm_unmatched) if crm_unmatched else 0,
+                    'MSWIPE Unlinked Count': len(mswipe_unmatched) if mswipe_unmatched else 0,
+                }]).to_excel(ew, sheet_name='Summary', index=False)
+            st.download_button(
+                label="📥 Export Online Drill-Down to Excel",
+                data=buf_online.getvalue(),
+                file_name=f"online_fraud_drilldown_{earliest_date}_{latest_date}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+
+        # ══════════════════════════════════════════════════════
+        # DRILL-DOWN: Cash Variance → Orders
+        # ══════════════════════════════════════════════════════
+        with st.expander(
+            f"💵 Drill Down: Cash Variance (₹{cash_gap:,.0f})",
+            expanded=False
+        ):
+            st.caption(
+                "Traces the cash gap to specific orders. Register totals "
+                "are adjusted by subtracting package purchases paid via cash. "
+                "Orders marked 'Cash paid' in CRM but NOT confirmed by the "
+                "runner or register are the most suspicious."
+            )
+
+            # Pre-load package cash amounts per day
+            pkg_cash_by_day = {}
+            pkg_cash_txns = session_db.query(PackageTransaction).filter(
+                PackageTransaction.transaction_date.in_(run_dates),
+                PackageTransaction.payment_mode == 'Cash',
+            ).all()
+            for pt in pkg_cash_txns:
+                pkg_cash_by_day[pt.transaction_date] = (
+                    pkg_cash_by_day.get(pt.transaction_date, 0) + float(pt.amount)
+                )
+
+            # Build daily comparison (adjusted for package cash)
+            daily_cash = []
+            for rd in sorted(run_dates):
+                day_crm_cash = sum(
+                    float(p.amount) for p in crm_payments_list
+                    if p.payment_mode == 'Cash' and p.payment_date == rd
+                )
+                reg = session_db.query(CashRegisterEntry).filter_by(entry_date=rd).first()
+                day_register_raw = float(reg.derived_cash_from_orders or 0) if reg else 0.0
+                day_pkg_cash = pkg_cash_by_day.get(rd, 0)
+                day_register = day_register_raw - day_pkg_cash  # adjusted
+                day_variance = day_crm_cash - day_register
+
+                if abs(day_variance) > 100 or day_crm_cash > 0 or day_register_raw > 0:
+                    daily_cash.append({
+                        'date': rd,
+                        'crm_cash': day_crm_cash,
+                        'register_raw': day_register_raw,
+                        'pkg_cash': day_pkg_cash,
+                        'register': day_register,
+                        'variance': day_variance,
+                    })
+
+            if daily_cash:
+                # ── Tab 1: Daily summary ──────────────────────
+                cash_tab_daily, cash_tab_orders = st.tabs([
+                    "📅 Daily Summary", "🔍 Suspicious Orders (Call List)"
+                ])
+
+                with cash_tab_daily:
+                    daily_rows = []
+                    for d in daily_cash:
+                        # Gap: positive = surplus (register > CRM), negative = shortfall (cash missing)
+                        gap = -(d['variance'])  # flip: old was CRM-Register, now Register-CRM
+                        daily_rows.append({
+                            'Date': str(d['date']),
+                            'CRM Cash': f"₹{d['crm_cash']:,.0f}",
+                            'Register (raw)': f"₹{d['register_raw']:,.0f}",
+                            '- Pkg': f"₹{d['pkg_cash']:,.0f}" if d['pkg_cash'] > 0 else '—',
+                            'Register (adj)': f"₹{d['register']:,.0f}",
+                            'Gap': gap,
+                            'Flag': '🔴' if gap < -100 else ('🟢' if gap > 100 else '✅'),
+                        })
+
+                    df_daily = pd.DataFrame(daily_rows)
+
+                    def _color_gap(val):
+                        """Green for surplus, red for shortfall."""
+                        if not isinstance(val, (int, float)):
+                            return ''
+                        if val < -100:
+                            return 'color: #ff4444; font-weight: bold'
+                        if val > 100:
+                            return 'color: #22cc44; font-weight: bold'
+                        return 'color: #888888'
+
+                    styled = df_daily.style.applymap(
+                        _color_gap, subset=['Gap']
+                    ).format({'Gap': '₹{:,.0f}'})
+                    st.dataframe(styled, width='stretch', hide_index=True)
+
+                    deficit_count = sum(1 for d in daily_cash if d['variance'] > 100)
+                    surplus_count = sum(1 for d in daily_cash if d['variance'] < -100)
+                    ok_count = len(daily_cash) - deficit_count - surplus_count
+                    st.caption(
+                        f"🔴 {deficit_count} deficit day(s) · "
+                        f"🟡 {surplus_count} surplus day(s) · "
+                        f"✅ {ok_count} OK"
+                    )
+
+                # ── Tab 2: Suspicious orders (call list) ──────
+                with cash_tab_orders:
+                    st.markdown(
+                        "**Orders below are CRM cash payments on days where "
+                        "the register shows a deficit.** Cross-referenced with "
+                        "notepad to flag orders the runner did NOT confirm receiving."
+                    )
+
+                    # Get all days with activity
+                    all_active_dates = {d['date'] for d in daily_cash}
+                    date_variance = {d['date']: d['variance'] for d in daily_cash}
+                    deficit_dates = {d['date'] for d in daily_cash if d['variance'] > 100}
+
+                    if not all_active_dates:
+                        st.success("✅ No cash activity — nothing to investigate.")
+                    else:
+                        # Pre-load notepad payments by (date, order_id) for cross-ref
+                        notepad_cash_set = set()
+                        for p in day_payments:
+                            if p.source == 'notepad' and (p.payment_mode or '').lower() == 'cash':
+                                notepad_cash_set.add((p.payment_date, p.order_id))
+
+                        # Cumulative running balance across the full period:
+                        # A deficit on Day X is "persistent" only if the
+                        # cumulative variance never recovers by end of period.
+                        # If later surpluses offset it, it's a timing issue.
+                        # ── Build raw candidate list first, then assign risk ──
+                        # Collect all CRM cash payments with metadata
+                        raw_candidates = []
+                        for p in crm_payments_list:
+                            if p.payment_mode != 'Cash':
+                                continue
+                            if p.payment_date not in all_active_dates:
+                                continue
+
+                            order = session_db.get(Order, p.order_id) if p.order_id else None
+                            notepad_confirmed = (p.payment_date, p.order_id) in notepad_cash_set
+                            day_var = date_variance.get(p.payment_date, 0)
+                            register_deficit = day_var > 100
+
+                            phone = ''
+                            if order and order.raw_data:
+                                phone = order.raw_data.get('Phone No.', order.raw_data.get('phone', ''))
+
+                            raw_candidates.append({
+                                'payment': p,
+                                'order': order,
+                                'notepad_confirmed': notepad_confirmed,
+                                'day_var': day_var,
+                                'register_deficit': register_deficit,
+                                'amount': float(p.amount),
+                                'phone': phone,
+                            })
+
+                        # ── Per-day capped risk assignment ──
+                        # On each deficit day, only flag unconfirmed orders up to
+                        # the day's deficit as 🔴 High. Beyond the deficit amount,
+                        # they become 🟡 Excess (can't all be pocketed).
+                        # This ensures High Risk total ≈ actual Cash Gap.
+                        from collections import defaultdict
+                        by_date = defaultdict(list)
+                        for c in raw_candidates:
+                            by_date[c['payment'].payment_date].append(c)
+
+                        suspicious_rows = []
+                        for dt, day_items in by_date.items():
+                            day_var = date_variance.get(dt, 0)
+                            day_deficit = max(day_var, 0)  # only positive = deficit
+
+                            # Sort unconfirmed first (largest amount), then confirmed
+                            unconfirmed = sorted(
+                                [c for c in day_items if not c['notepad_confirmed']],
+                                key=lambda c: -c['amount']
+                            )
+                            confirmed = [c for c in day_items if c['notepad_confirmed']]
+
+                            # Assign risk to unconfirmed orders
+                            high_budget = day_deficit  # how much 🔴 we can assign
+                            for c in unconfirmed:
+                                if c['register_deficit'] and high_budget > 0:
+                                    risk = '🔴 High'
+                                    high_budget -= c['amount']
+                                elif c['register_deficit'] and high_budget <= 0:
+                                    risk = '🟡 Excess'
+                                elif not c['register_deficit']:
+                                    risk = '🟡 Medium'
+                                else:
+                                    risk = '🟡 Medium'
+
+                                suspicious_rows.append({
+                                    'Date': str(dt),
+                                    'Order #': c['order'].order_number if c['order'] else '—',
+                                    'Customer': (c['order'].customer_name or '—') if c['order'] else '—',
+                                    'Phone': str(c['phone']) if c['phone'] else '—',
+                                    'Cash (CRM)': f"₹{c['amount']:,.0f}",
+                                    'Notepad': '❌',
+                                    'Register': '❌ Deficit' if c['register_deficit'] else '✅ OK',
+                                    'Risk': risk,
+                                    'Day Gap': -(day_var),
+                                })
+
+                            # Confirmed orders
+                            for c in confirmed:
+                                suspicious_rows.append({
+                                    'Date': str(dt),
+                                    'Order #': c['order'].order_number if c['order'] else '—',
+                                    'Customer': (c['order'].customer_name or '—') if c['order'] else '—',
+                                    'Phone': str(c['phone']) if c['phone'] else '—',
+                                    'Cash (CRM)': f"₹{c['amount']:,.0f}",
+                                    'Notepad': '✅',
+                                    'Register': '❌ Deficit' if c['register_deficit'] else '✅ OK',
+                                    'Risk': '🟢 Low',
+                                    'Day Gap': -(day_var),
+                                })
+
+                        if suspicious_rows:
+                            # Sort: high → excess → medium → low; by amount desc
+                            risk_order = {'🔴 High': 0, '🟡 Excess': 1, '🟡 Medium': 2, '🟢 Low': 3}
+                            suspicious_rows.sort(
+                                key=lambda r: (
+                                    risk_order.get(r['Risk'], 9),
+                                    -int(r['Cash (CRM)'].replace('₹', '').replace(',', '')),
+                                ),
+                            )
+
+                            # Summary metrics
+                            high_risk = [r for r in suspicious_rows if r['Risk'] == '🔴 High']
+                            excess_risk = [r for r in suspicious_rows if r['Risk'] == '🟡 Excess']
+                            med_risk = [r for r in suspicious_rows if r['Risk'] == '🟡 Medium']
+                            low_risk = [r for r in suspicious_rows if r['Risk'] == '🟢 Low']
+                            high_total = sum(
+                                int(r['Cash (CRM)'].replace('₹', '').replace(',', ''))
+                                for r in high_risk
+                            )
+                            excess_total = sum(
+                                int(r['Cash (CRM)'].replace('₹', '').replace(',', ''))
+                                for r in excess_risk
+                            )
+                            med_total = sum(
+                                int(r['Cash (CRM)'].replace('₹', '').replace(',', ''))
+                                for r in med_risk
+                            )
+                            low_total = sum(
+                                int(r['Cash (CRM)'].replace('₹', '').replace(',', ''))
+                                for r in low_risk
+                            )
+                            all_listed_total = high_total + excess_total + med_total + low_total
+
+                            col_s1, col_s2, col_s3, col_s4, col_s5 = st.columns(5)
+                            col_s1.metric(
+                                "🚨 Cash Gap",
+                                f"₹{cash_gap:,.0f}",
+                                delta="NET missing",
+                                delta_color="inverse" if cash_gap > 100 else "off",
+                            )
+                            col_s2.metric(
+                                "🔴 High Risk",
+                                str(len(high_risk)),
+                                delta=f"₹{high_total:,}",
+                                delta_color="inverse",
+                            )
+                            col_s3.metric(
+                                "🟡 Excess/Medium",
+                                str(len(excess_risk) + len(med_risk)),
+                                delta=f"₹{excess_total + med_total:,}" if (excess_total + med_total) else None,
+                                delta_color="off",
+                            )
+                            col_s4.metric("🟢 Confirmed", str(len(low_risk)))
+                            col_s5.metric("All Orders", str(len(suspicious_rows)),
+                                          delta=f"₹{all_listed_total:,}")
+
+                            df_suspicious = pd.DataFrame(suspicious_rows)
+
+                            def _color_day_gap(val):
+                                if not isinstance(val, (int, float)):
+                                    return ''
+                                if val < -100:
+                                    return 'color: #ff4444; font-weight: bold'
+                                if val > 100:
+                                    return 'color: #22cc44; font-weight: bold'
+                                return 'color: #888888'
+
+                            styled_sus = df_suspicious.style.applymap(
+                                _color_day_gap, subset=['Day Gap']
+                            ).format({'Day Gap': '₹{:,.0f}'})
+                            st.dataframe(
+                                styled_sus,
+                                width='stretch', hide_index=True,
+                            )
+                            st.caption(
+                                "**🔴 High**: No notepad + on a deficit day, "
+                                "capped at day's deficit (these orders "
+                                "account for the missing cash — investigate). · "
+                                "**🟡 Excess**: No notepad + deficit day, "
+                                "but beyond the day's gap (can't all be "
+                                "pocketed since register proves partial deposit). · "
+                                "**🟡 Medium**: No notepad but register OK. · "
+                                "**🟢 Low**: Runner confirmed."
+                            )
+
+                            # ── Excel Export: Cash drill-down ──
+                            buf_cash = io.BytesIO()
+                            with pd.ExcelWriter(buf_cash, engine='xlsxwriter') as ew:
+                                df_suspicious.to_excel(ew, sheet_name='Suspicious_Orders', index=False)
+                                pd.DataFrame(daily_rows).to_excel(ew, sheet_name='Daily_Summary', index=False)
+                                # High risk only sheet for quick action
+                                if high_risk:
+                                    pd.DataFrame(high_risk).to_excel(ew, sheet_name='High_Risk_Only', index=False)
+                                # Summary sheet
+                                pd.DataFrame([{
+                                    'Period': f"{earliest_date} to {latest_date}",
+                                    'CRM Cash': f"{crm_cash:,.0f}",
+                                    'Register (adj)': f"{register_orders_only:,.0f}",
+                                    'Cash Gap': f"{cash_gap:,.0f}",
+                                    'High Risk Orders': len(high_risk),
+                                    'High Risk Amount': f"{high_total:,}",
+                                    'Excess/Medium': len(excess_risk) + len(med_risk),
+                                    'Low Risk (confirmed)': len(low_risk),
+                                }]).to_excel(ew, sheet_name='Summary', index=False)
+                            st.download_button(
+                                label="📥 Export Cash Drill-Down to Excel",
+                                data=buf_cash.getvalue(),
+                                file_name=f"cash_fraud_drilldown_{earliest_date}_{latest_date}.xlsx",
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            )
+                        else:
+                            st.info("No CRM cash orders found in the selected period.")
+            else:
+                st.info("No cash activity in the selected period.")
+
+        # ── Detailed CRM breakdown ──
+        with st.expander("📊 Detailed CRM Breakdown by Mode", expanded=False):
+            detail_rows = []
+            _mode_icons = {'Cash': '💵', 'Google Pay': '💳', 'GPay': '💳', 'UPI': '💳',
+                          'Paytm': '📱', 'PhonePe': '📱', 'Package': '📦', 'Card': '💳',
+                          'Online': '🌐', 'Advance': '⏩', 'Due': '⏳'}
+            for mode in sorted(crm_by_mode.keys()):
+                icon = _mode_icons.get(mode, '🔹')
+                detail_rows.append({
+                    'Mode': f"{icon} {mode}",
+                    'CRM Amount': f"₹{crm_by_mode[mode]:,.0f}",
+                    'Transactions': sum(1 for p in crm_payments_list if (p.payment_mode or 'Unknown') == mode),
+                })
+            st.dataframe(pd.DataFrame(detail_rows), width='stretch', hide_index=True)
+
+        # ── Cash flow breakdown ──
+        with st.expander("🏦 Cash Flow Details", expanded=False):
+            st.markdown(f"""
+            | Item | Amount |
+            |---|---|
+            | Register derived cash (orders) | ₹{register_cash_total:,.0f} |
+            | Cash expenses (already in derived) | ₹{cash_expenses_total:,.0f} |
+            | Bank deposits (already in derived) | ₹{bank_deposit_total:,.0f} |
+            """)
 
     # ══════════════════════════════════════════════════════
     # TAB 3: Exceptions Queue (simplified filters)

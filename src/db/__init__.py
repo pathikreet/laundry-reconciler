@@ -8,3 +8,5 @@ from src.models.audit import AuditLog
 from src.models.config import ColumnMapping, ToleranceConfig
 from src.models.cash_register import CashRegisterEntry
 from src.models.expenses import Expense
+from src.models.bank_deposit import BankDeposit
+from src.models.package_transaction import PackageTransaction

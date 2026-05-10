@@ -479,7 +479,13 @@ class ReconciliationService:
         count = 0
         gpay_modes = {'GPay', 'Google Pay', 'UPI'}
         cash_modes = {'Cash'}
-        notepad_confirm_modes = {'Paytm', 'Online', 'Package', 'Card'}
+        # Paytm and Package are AUTO-RECORDED in CRM — not fraud vectors.
+        # Paytm: verify against Paytm QR data (source='paytm').
+        # Package: auto wallet deduction, no external verification needed.
+        paytm_modes = {'Paytm', 'PhonePe'}
+        package_modes = {'Package'}
+        # Card and other staff-entered modes: verify via notepad
+        notepad_confirm_modes = {'Online', 'Card'}
 
         crm_payments_today = [
             p for p in order.payments
@@ -531,8 +537,61 @@ class ReconciliationService:
                     )
                     count += 1
 
+            elif mode in paytm_modes:
+                # Paytm: auto-recorded via QR scan — verify against
+                # Paytm QR data. NOT a fraud vector.
+                paytm_linked = any(
+                    p for p in order.payments
+                    if p.source == 'paytm'
+                )
+                if not paytm_linked:
+                    # Low severity — Paytm is auto-recorded, mismatch
+                    # is a data sync issue, not fraud
+                    self._create_exception(
+                        run_id, order.id, 'low', 'PaytmNotInQRData',
+                        tags=['PaytmRecon', 'AutoRecorded'],
+                        evidence={
+                            'crm_amount': round(float(payment.amount), 2),
+                            'crm_date': str(run_date),
+                            'payment_mode': mode,
+                            'missing_source': 'PaytmQR',
+                        },
+                        action='CRM auto-recorded Paytm payment not found in Paytm QR data — likely timing or data sync issue'
+                    )
+                    count += 1
+
+            elif mode in package_modes:
+                # Package: auto wallet deduction — but runners DO record
+                # Package deliveries in notepad (amount=0, mode='Package').
+                # Check notepad for confirmation (delivery or payment).
+                notepad_package_confirmed = any(
+                    p for p in order.payments
+                    if p.source == 'notepad'
+                )
+                if not notepad_package_confirmed:
+                    # Also check delivery events (runners note package as delivery mode)
+                    notepad_delivery_confirmed = any(
+                        d for d in order.deliveries
+                        if d.source == 'notepad'
+                        and (d.payment_mode or '').lower() in ('package',)
+                    )
+                    if not notepad_delivery_confirmed:
+                        self._create_exception(
+                            run_id, order.id, 'low', 'PackageNotConfirmedByNotepad',
+                            tags=['MissingNotepadConfirmation', 'AutoRecorded'],
+                            evidence={
+                                'crm_amount': round(float(payment.amount), 2),
+                                'crm_date': str(run_date),
+                                'payment_mode': mode,
+                                'missing_source': 'Notepad',
+                            },
+                            action='CRM auto-deducted Package payment but runner notepad has no entry. '
+                                   'Not a fraud risk — runner may have omitted the note.'
+                        )
+                        count += 1
+
             elif mode in notepad_confirm_modes:
-                # Check notepad has a payment for this order
+                # Other staff-entered modes: check notepad
                 notepad_confirmed = any(
                     p for p in order.payments
                     if p.source == 'notepad' and float(p.amount) > 0
@@ -844,7 +903,7 @@ class ReconciliationService:
         'self-correcting'.
 
         Returns a dict with:
-          net_gpay_variance       — Σ CRM GPay − Σ MSWIPE for period
+            net_gpay_variance       — Σ CRM GPay − Σ MSWIPE for period
           net_cash_variance       — Σ notepad cash − Σ register cash for period
           self_correcting_pairs   — count of surplus/deficit pairs that net to 0
           persistent_exceptions   — list of exceptions not cancelled by period netting
@@ -868,6 +927,14 @@ class ReconciliationService:
         mswipe_total = float(
             self.db.query(func.sum(PaymentEvent.amount)).filter(
                 PaymentEvent.source == 'mswipe',
+                PaymentEvent.payment_date >= start_date,
+                PaymentEvent.payment_date <= end_date,
+            ).scalar() or 0.0
+        )
+        # Paytm QR payments (auto-recorded, not a fraud vector)
+        paytm_total = float(
+            self.db.query(func.sum(PaymentEvent.amount)).filter(
+                PaymentEvent.source == 'paytm',
                 PaymentEvent.payment_date >= start_date,
                 PaymentEvent.payment_date <= end_date,
             ).scalar() or 0.0
@@ -897,6 +964,34 @@ class ReconciliationService:
             ).scalar() or 0.0
         )
 
+        # Package purchases in period (these inflate register/MSWIPE but
+        # are not CRM order payments — must be subtracted)
+        from src.models.package_transaction import PackageTransaction
+        pkg_cash_total = float(
+            self.db.query(func.sum(PackageTransaction.amount)).filter(
+                PackageTransaction.transaction_date >= start_date,
+                PackageTransaction.transaction_date <= end_date,
+                PackageTransaction.payment_mode == 'Cash',
+            ).scalar() or 0.0
+        )
+        pkg_online_total = float(
+            self.db.query(func.sum(PackageTransaction.amount)).filter(
+                PackageTransaction.transaction_date >= start_date,
+                PackageTransaction.transaction_date <= end_date,
+                PackageTransaction.payment_mode == 'Online',
+            ).scalar() or 0.0
+        )
+
+        # Adjusted totals (subtract package purchases from actuals)
+        register_cash_adjusted = register_cash_total - pkg_cash_total
+        mswipe_adjusted = mswipe_total - pkg_online_total
+
+        net_gpay_variance = round(crm_gpay_total - mswipe_adjusted, 2)
+        # derived_cash_from_orders already includes expenses + bank deposits,
+        # so compare directly without adding them back
+        net_cash_variance = round(notepad_cash_total - register_cash_adjusted, 2)
+        net_crm_vs_register_variance = round(crm_cash_total - register_cash_adjusted, 2)
+
         # ── Expense totals for the period ──────────────────────
         total_cash_expenses = float(
             self.db.query(func.sum(Expense.amount)).filter(
@@ -914,9 +1009,20 @@ class ReconciliationService:
         )
         total_expenses = total_cash_expenses + total_online_expenses
 
+        # Bank deposits for the period
+        from src.models.bank_deposit import BankDeposit
+        total_bank_deposits = float(
+            self.db.query(func.sum(BankDeposit.amount)).filter(
+                BankDeposit.deposit_date >= start_date,
+                BankDeposit.deposit_date <= end_date,
+            ).scalar() or 0.0
+        )
+
         net_gpay_variance = round(crm_gpay_total - mswipe_total, 2)
-        net_cash_variance = round(notepad_cash_total - (register_cash_total + total_cash_expenses), 2)
-        net_crm_vs_register_variance = round(crm_cash_total - (register_cash_total + total_cash_expenses), 2)
+        # derived_cash_from_orders already includes expenses + bank deposits,
+        # so compare directly without adding them back
+        net_cash_variance = round(notepad_cash_total - register_cash_total, 2)
+        net_crm_vs_register_variance = round(crm_cash_total - register_cash_total, 2)
 
         # ── Gather all exceptions for the period ──────────────
         runs = self.db.query(ReconciliationRun).filter(
@@ -989,13 +1095,20 @@ class ReconciliationService:
             'end_date': str(end_date),
             'days_in_period': (end_date - start_date).days + 1,
             'runs_completed': len(runs),
-            # GPay
+            # GPay/UPI/Card (fraud vector — staff can mark in CRM)
             'crm_gpay_total': round(crm_gpay_total, 2),
             'mswipe_total': round(mswipe_total, 2),
+            'mswipe_adjusted': round(mswipe_adjusted, 2),
             'net_gpay_variance': net_gpay_variance,
+            # Paytm (auto-recorded, not a fraud vector)
+            'paytm_total': round(paytm_total, 2),
+            # Package adjustments
+            'pkg_cash_total': round(pkg_cash_total, 2),
+            'pkg_online_total': round(pkg_online_total, 2),
             # Cash (Notepad vs Register — classic daily variance)
             'notepad_cash_total': round(notepad_cash_total, 2),
             'register_cash_total': round(register_cash_total, 2),
+            'register_cash_adjusted': round(register_cash_adjusted, 2),
             'net_cash_variance': net_cash_variance,
             # Cash (CRM vs Register — undeposited cash / fraud detection)
             'crm_cash_total': round(crm_cash_total, 2),
@@ -1004,6 +1117,8 @@ class ReconciliationService:
             'total_cash_expenses': round(total_cash_expenses, 2),
             'total_online_expenses': round(total_online_expenses, 2),
             'total_expenses': round(total_expenses, 2),
+            # Bank deposits
+            'total_bank_deposits': round(total_bank_deposits, 2),
             # Exception stats
             'total_exceptions': len(all_exceptions),
             'persistent_exceptions_count': len(persistent),
@@ -1097,7 +1212,10 @@ class ReconciliationService:
         Validate cash: expected cash (Notepad) vs derived cash (Cash Register).
 
         Uses configurable cash_variance_tolerance for the threshold.
-        Adjusts for legitimate cash expenses on the same date.
+
+        Note: ``derived_cash_from_orders`` already includes expenses and
+        bank deposits added back at import time, so no manual adjustment
+        is needed here.
         """
         # Skip cash checks before cash register data was available
         cash_from = self.settings.cash_register_available_from
@@ -1117,17 +1235,7 @@ class ReconciliationService:
         if register_entry:
             derived_cash = float(register_entry.derived_cash_from_orders or 0.0)
 
-            # Add back cash expenses: register closing is lower because of
-            # legitimate cash outflows, so derived_cash understates actual collections
-            cash_expenses = float(
-                self.db.query(func.sum(Expense.amount)).filter(
-                    Expense.expense_date == run_date,
-                    Expense.mode == 'Cash',
-                ).scalar() or 0.0
-            )
-            adjusted_derived = derived_cash + cash_expenses
-
-            cash_diff = adjusted_derived - float(expected_cash)
+            cash_diff = derived_cash - float(expected_cash)
 
             if abs(cash_diff) > self.cash_variance_tolerance:
                 self._create_exception(
@@ -1136,13 +1244,11 @@ class ReconciliationService:
                     {
                         'expected': round(float(expected_cash), 2),
                         'derived': round(derived_cash, 2),
-                        'cash_expenses': round(cash_expenses, 2),
-                        'adjusted_derived': round(adjusted_derived, 2),
                         'diff': round(cash_diff, 2)
                     },
-                    f'Check cash register. Register shows ₹{derived_cash:.0f} + '
-                    f'₹{cash_expenses:.0f} expenses = ₹{adjusted_derived:.0f} vs '
-                    f'₹{float(expected_cash):.0f} expected from notepad.'
+                    f'Check cash register. Register derived cash '\
+                    f'{derived_cash:.0f} vs '\
+                    f'{float(expected_cash):.0f} expected from notepad.'
                 )
                 return 1
         return 0
@@ -1161,7 +1267,9 @@ class ReconciliationService:
         the runner entered the payment in the notepad. If both notepad and
         register are silent but CRM shows cash received, this rule fires.
 
-        Adjusts for legitimate cash expenses on the same date.
+        Note: ``derived_cash_from_orders`` already includes expenses and
+        bank deposits added back at import time, so no manual adjustment
+        is needed here.
 
         Severity: high — undeposited cash is a critical discrepancy.
         Exception type: CashUndeposited
@@ -1189,17 +1297,18 @@ class ReconciliationService:
         # If no register entry at all, treat deposited amount as zero.
         register_cash = float(register_entry.derived_cash_from_orders or 0.0) if register_entry else 0.0
 
-        # Add back cash expenses: they reduce the register closing balance
-        # but represent legitimate outflows, not pocketed cash
-        cash_expenses = float(
-            self.db.query(func.sum(Expense.amount)).filter(
-                Expense.expense_date == run_date,
-                Expense.mode == 'Cash',
+        # Subtract package cash purchases from register (packages are
+        # real cash inflows that don't correspond to CRM cash payments)
+        from src.models.package_transaction import PackageTransaction
+        pkg_cash = float(
+            self.db.query(func.sum(PackageTransaction.amount)).filter(
+                PackageTransaction.transaction_date == run_date,
+                PackageTransaction.payment_mode == 'Cash',
             ).scalar() or 0.0
         )
-        adjusted_register = register_cash + cash_expenses
+        register_cash_adjusted = register_cash - pkg_cash
 
-        undeposited = crm_cash - adjusted_register
+        undeposited = crm_cash - register_cash_adjusted
 
         if undeposited > self.cash_variance_tolerance:
             self._create_exception(
@@ -1207,22 +1316,23 @@ class ReconciliationService:
                 tags=['CashNotInRegister', 'PotentialFraud'],
                 evidence={
                     'crm_cash_total': round(crm_cash, 2),
-                    'register_cash_total': round(register_cash, 2),
-                    'cash_expenses': round(cash_expenses, 2),
-                    'adjusted_register': round(adjusted_register, 2),
+                    'register_derived_cash': round(register_cash, 2),
+                    'pkg_cash_purchases': round(pkg_cash, 2),
+                    'register_adjusted': round(register_cash_adjusted, 2),
                     'undeposited_amount': round(undeposited, 2),
                     'date': str(run_date),
                 },
                 action=(
-                    f'₹{undeposited:.0f} collected as cash per CRM but not reflected '
-                    f'in cash register on {run_date} (register ₹{register_cash:.0f} '
-                    f'+ expenses ₹{cash_expenses:.0f} = ₹{adjusted_register:.0f}). '
+                    f'Rs {undeposited:.0f} collected as cash per CRM but not reflected '
+                    f'in cash register on {run_date} (register Rs {register_cash:.0f}'
+                    f'{f", minus Rs {pkg_cash:.0f} package purchases" if pkg_cash > 0 else ""}'
+                    f' = Rs {register_cash_adjusted:.0f} adjusted). '
                     f'Verify cash was deposited or investigate for missing deposit.'
                 )
             )
             logger.info(
-                "CashUndeposited: ₹%.2f CRM cash vs ₹%.2f register + ₹%.2f expenses on %s (gap=₹%.2f)",
-                crm_cash, register_cash, cash_expenses, run_date, undeposited
+                "CashUndeposited: Rs %.2f CRM cash vs Rs %.2f register (adj) on %s (gap=Rs %.2f, pkg=Rs %.2f)",
+                crm_cash, register_cash_adjusted, run_date, undeposited, pkg_cash
             )
             return 1
 
