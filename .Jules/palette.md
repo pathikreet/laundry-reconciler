@@ -13,3 +13,7 @@
 ## 2026-03-21 - Navigation Empty States and Streamlit Callbacks
 **Learning:** Empty states with "dead-end" warning messages create friction. Providing a direct Call-to-Action (CTA) button to the next logical step (e.g., navigating to a data generation page) significantly improves flow. However, in Streamlit, directly mutating a widget's session state (like a sidebar navigation radio) *after* it has been rendered causes a fatal `StreamlitAPIException`. Navigation must be handled via `on_click` callbacks attached to buttons, rather than inline state mutation followed by `st.rerun()`.
 **Action:** Replace dead-end warnings with `st.info` and a primary CTA button. Implement programmatic navigation using `on_click=navigate_to_callback` instead of setting `st.session_state` directly.
+
+## 2026-05-10 - Toast over Success before Rerun
+**Learning:** Using `st.success` immediately before an `st.rerun()` creates a jarring UX where the success message flashes and vanishes before the user can read it.
+**Action:** Use `st.toast` for notifications that immediately precede a script rerun, as toasts persist across reruns.

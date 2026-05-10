@@ -336,7 +336,7 @@ def render_import_step(step_num, title, desc, key, importer_class, session_db,
 
                 if all_ok:
                     st.session_state.imports[key] = {'done': True, 'result': total_res}
-                    st.success(f"✅ All {len(uploaded_files)} {title} file(s) imported successfully!")
+                    st.toast(f"✅ All {len(uploaded_files)} {title} file(s) imported successfully!")
                     if total_res['errors'] > 0:
                         st.warning(f"⚠️ {total_res['errors']} rows had issues and were skipped")
                     st.rerun()
@@ -460,7 +460,7 @@ def render_notepad_step(session_db, is_unlocked):
                             break
                     if all_ok:
                         st.session_state.imports['notepad'] = {'done': True, 'result': total_res}
-                        st.success(f"✅ All {len(uploaded_files)} Notepad file(s) imported!")
+                        st.toast(f"✅ All {len(uploaded_files)} Notepad file(s) imported!")
                         st.rerun()
 
     # ── Tab 2: Manual Entry ──
@@ -498,7 +498,7 @@ def render_notepad_step(session_db, is_unlocked):
                         'runner_name': entry_runner,
                         'notes': entry_notes,
                     })
-                    st.success(f"Added entry for {entry_customer or entry_order}")
+                    st.toast(f"Added entry for {entry_customer or entry_order}")
                     st.rerun()
 
         # ── Show queued entries ──
@@ -576,7 +576,7 @@ def render_notepad_step(session_db, is_unlocked):
                                 'result': {'total': saved, 'imported': saved, 'errors': 0}
                             }
                             st.session_state.notepad_entries = []
-                            st.success(f"✅ Saved {saved} entries!")
+                            st.toast(f"✅ Saved {saved} entries!")
                             st.rerun()
                         except Exception as ex:
                             session_db.rollback()
@@ -670,7 +670,7 @@ def render_cash_register_step(session_db, is_unlocked):
                 if all_ok:
                     st.session_state.imports['cash_register'] = {'done': True, 'result': total_res}
                     sheets_label = sheets_to_import if isinstance(selected_sheet, list) else [selected_sheet]
-                    st.success(f"✅ Cash Register imported! Sheets: {', '.join(str(s) for s in sheets_label)}")
+                    st.toast(f"✅ Cash Register imported! Sheets: {', '.join(str(s) for s in sheets_label)}")
                     if total_res['errors'] > 0:
                         st.warning(f"⚠️ {total_res['errors']} rows had issues and were skipped")
                     st.rerun()
@@ -2388,7 +2388,7 @@ def page_results(session_db):
                         ex_obj.resolution_note = note
                         ex_obj.resolved_at = datetime.utcnow()
                         session_db.commit()
-                        st.success(f"Exception {sel_id} marked as '{resolution}'")
+                        st.toast(f"Exception {sel_id} marked as '{resolution}'")
                         st.rerun()
             else:
                 st.info("No exceptions match the selected filters.")
@@ -2866,21 +2866,21 @@ def page_order_lookup(session_db):
                             e.resolution_note = note
                             e.resolved_at = datetime.utcnow()
                             session_db.commit()
-                            st.success(f"Exception {e.id} marked as '{resolution}'")
+                            st.toast(f"Exception {e.id} marked as '{resolution}'")
                             st.rerun()
 
 
 # ── Main App ──────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="Digital Accountant",
+    page_title="Laundry Reconciler",
     page_icon="🧺",
     layout="wide"
 )
 
 load_css()
 
-st.title("🧺 Digital Accountant")
+st.title("🧺 Laundry Reconciler")
 
 # Sidebar navigation
 st.sidebar.title("Navigation")
