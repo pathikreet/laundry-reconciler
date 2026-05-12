@@ -1,6 +1,7 @@
 
 Collecting usage statistics. To deactivate, set browser.gatherUsageStats to false.
 
+2026-05-12 17:43:55.840 Uvicorn server started on 0.0.0.0:8501
 
   You can now view your Streamlit app in your browser.
 
@@ -8,155 +9,13 @@ Collecting usage statistics. To deactivate, set browser.gatherUsageStats to fals
   Network URL: http://192.168.0.2:8501
   External URL: http://34.27.142.64:8501
 
-2026-03-21 17:08:52.615 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1180, in <module>
-    page_results(session_db)
-  File "/app/src/ui/app.py", line 750, in page_results
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-2026-03-21 17:09:14.522 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1180, in <module>
-    page_results(session_db)
-  File "/app/src/ui/app.py", line 750, in page_results
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-2026-03-21 17:09:48.707 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1180, in <module>
-    page_results(session_db)
-  File "/app/src/ui/app.py", line 750, in page_results
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-2026-03-21 17:10:19.055 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1180, in <module>
-    page_results(session_db)
-  File "/app/src/ui/app.py", line 750, in page_results
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-2026-03-21 17:10:38.779 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1180, in <module>
-    page_results(session_db)
-  File "/app/src/ui/app.py", line 750, in page_results
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-2026-03-21 17:10:39.232 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1182, in <module>
-    page_history(session_db)
-  File "/app/src/ui/app.py", line 1146, in page_history
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-Database initialized at laundry_reconciler.db
-  Stopping...
+2026-05-12 17:50:34.871 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-05-12 17:51:06.211 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
