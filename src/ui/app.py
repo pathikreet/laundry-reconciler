@@ -336,9 +336,9 @@ def render_import_step(step_num, title, desc, key, importer_class, session_db,
 
                 if all_ok:
                     st.session_state.imports[key] = {'done': True, 'result': total_res}
-                    st.success(f"✅ All {len(uploaded_files)} {title} file(s) imported successfully!")
+                    st.toast(f"✅ All {len(uploaded_files)} {title} file(s) imported successfully!")
                     if total_res['errors'] > 0:
-                        st.warning(f"⚠️ {total_res['errors']} rows had issues and were skipped")
+                        st.toast(f"⚠️ {total_res['errors']} rows had issues and were skipped")
                     st.rerun()
 
 
@@ -460,7 +460,7 @@ def render_notepad_step(session_db, is_unlocked):
                             break
                     if all_ok:
                         st.session_state.imports['notepad'] = {'done': True, 'result': total_res}
-                        st.success(f"✅ All {len(uploaded_files)} Notepad file(s) imported!")
+                        st.toast(f"✅ All {len(uploaded_files)} Notepad file(s) imported!")
                         st.rerun()
 
     # ── Tab 2: Manual Entry ──
@@ -471,17 +471,17 @@ def render_notepad_step(session_db, is_unlocked):
         with st.expander("➕ Add Order Details", expanded=len(st.session_state.notepad_entries) == 0):
             col1, col2 = st.columns(2)
             with col1:
-                entry_date = st.date_input("Delivery Date", value=date.today(), key="np_date")
+                entry_date = st.date_input("Delivery Date *", value=date.today(), key="np_date", help="Required field")
                 entry_customer = st.text_input("Customer Name (optional)", key="np_customer")
-                entry_order = st.text_input("Order Number", key="np_order",
-                                           placeholder="e.g. T697")
+                entry_order = st.text_input("Order Number *", key="np_order",
+                                           placeholder="e.g. T697", help="Required field")
                 entry_runner = st.text_input("Runner Name", key="np_runner")
             with col2:
-                entry_amount = st.number_input("Amount Collected (₹)", min_value=0.0,
-                                              step=10.0, key="np_amount")
-                entry_mode = st.selectbox("Payment Mode", 
+                entry_amount = st.number_input("Amount Collected (₹) *", min_value=0.0,
+                                              step=10.0, key="np_amount", help="Required field")
+                entry_mode = st.selectbox("Payment Mode *",
                                          ["Cash", "Google Pay", "Paytm", "Package", "Card", "Other"],
-                                         key="np_mode")
+                                         key="np_mode", help="Required field")
                 entry_notes = st.text_area("Notes (optional)", key="np_notes",
                                           placeholder="Any remarks...", height=68)
 
@@ -498,7 +498,7 @@ def render_notepad_step(session_db, is_unlocked):
                         'runner_name': entry_runner,
                         'notes': entry_notes,
                     })
-                    st.success(f"Added entry for {entry_customer or entry_order}")
+                    st.toast(f"Added entry for {entry_customer or entry_order}")
                     st.rerun()
 
         # ── Show queued entries ──
@@ -576,7 +576,7 @@ def render_notepad_step(session_db, is_unlocked):
                                 'result': {'total': saved, 'imported': saved, 'errors': 0}
                             }
                             st.session_state.notepad_entries = []
-                            st.success(f"✅ Saved {saved} entries!")
+                            st.toast(f"✅ Saved {saved} entries!")
                             st.rerun()
                         except Exception as ex:
                             session_db.rollback()
@@ -670,9 +670,9 @@ def render_cash_register_step(session_db, is_unlocked):
                 if all_ok:
                     st.session_state.imports['cash_register'] = {'done': True, 'result': total_res}
                     sheets_label = sheets_to_import if isinstance(selected_sheet, list) else [selected_sheet]
-                    st.success(f"✅ Cash Register imported! Sheets: {', '.join(str(s) for s in sheets_label)}")
+                    st.toast(f"✅ Cash Register imported! Sheets: {', '.join(str(s) for s in sheets_label)}")
                     if total_res['errors'] > 0:
-                        st.warning(f"⚠️ {total_res['errors']} rows had issues and were skipped")
+                        st.toast(f"⚠️ {total_res['errors']} rows had issues and were skipped")
                     st.rerun()
 
 
@@ -780,10 +780,8 @@ def page_import(session_db):
 
     if done == total and total > 0:
         st.success("🎉 All imports complete!")
-        def _nav_to_recon():
-            st.session_state['nav_radio'] = "Run Reconciliation"
         
-        st.button("▶️ Go to Run Reconciliation", type="primary", key="nav_to_recon", on_click=_nav_to_recon)
+        st.button("▶️ Go to Run Reconciliation", type="primary", key="nav_to_recon", on_click=navigate_to, args=("Run Reconciliation",))
 
     # Reset button
     col1, col2 = st.columns([4, 1])
@@ -1024,9 +1022,7 @@ def page_reconciliation(session_db):
                 st.session_state['range_results'] = totals
                 st.session_state['range_dates'] = (str(start_date), str(end_date))
 
-                if st.button("📊 View Results", type="primary", key="nav_to_results_range"):
-                    st.session_state['nav_radio'] = "View Results"
-                    st.rerun()
+                st.button("📊 View Results", type="primary", key="nav_to_results_range", on_click=navigate_to, args=("View Results",))
 
 
 # ── Period Summary (Monthly / Quarterly) ─────────────────
@@ -2880,7 +2876,7 @@ st.set_page_config(
 
 load_css()
 
-st.title("🧺 Digital Accountant")
+st.title("🧺 Laundry Reconciler")
 
 # Sidebar navigation
 st.sidebar.title("Navigation")
