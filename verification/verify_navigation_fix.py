@@ -13,11 +13,12 @@ def verify_empty_states():
             page.goto("http://localhost:8501")
 
             # Wait for main app to load
-            expect(page.get_by_text("Laundry Reconciler").first).to_be_visible(timeout=10000)
+            expect(page.get_by_text("Digital Accountant").first).to_be_visible(timeout=10000)
 
             # 1. Verify View Results empty state navigation
-            page.get_by_text("View Results").click()
-            expect(page.get_by_text("Reconciliation Dashboard").first).to_be_visible()
+            page.locator('label').filter(has_text='View Results').click()
+            page.wait_for_selector('text="📊 Reconciliation Dashboard"', timeout=10000)
+            expect(page.get_by_text("📊 Reconciliation Dashboard").first).to_be_visible()
 
             btn_results = page.locator('button').filter(has_text="Go to Run Reconciliation")
             expect(btn_results).to_be_visible()
@@ -30,7 +31,7 @@ def verify_empty_states():
             expect(page.get_by_text("⚙️ Reconciliation Engine").first).to_be_visible(timeout=10000)
 
             # 2. Verify History empty state navigation
-            page.get_by_text("History").click()
+            page.locator('label').filter(has_text='History').click()
             expect(page.get_by_text("📜 Reconciliation History").first).to_be_visible(timeout=10000)
 
             btn_history = page.locator('button').filter(has_text="Go to Run Reconciliation")
