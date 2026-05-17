@@ -1,5 +1,5 @@
 import logging
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_
 from datetime import date, timedelta
 from typing import List, Dict, Any, Optional
@@ -505,7 +505,7 @@ class ReconciliationService:
                 )
                 if not mswipe_linked:
                     self._create_exception(
-                        run_id, order.id, 'high', 'GPayOrderMismatch',
+                        run_id, order.id, 'medium', 'GPayOrderMismatch',
                         tags=['MissingMSWIPE', 'CrossSourceMismatch'],
                         evidence={
                             'crm_amount': round(float(payment.amount), 2),
@@ -628,8 +628,8 @@ class ReconciliationService:
         threshold = self.settings.ageing_threshold
         cutoff = run_date - timedelta(days=threshold)
 
-        # Query orders placed on or before cutoff
-        old_orders = self.db.query(Order).filter(
+        # Query orders placed on or before cutoff, eager load deliveries to prevent N+1
+        old_orders = self.db.query(Order).options(joinedload(Order.deliveries)).filter(
             Order.order_date <= cutoff
         ).all()
 
@@ -638,6 +638,10 @@ class ReconciliationService:
             balance = float(order.order_amount) - sum(float(p.amount) for p in order.payments)
             if balance <= self.credit_tolerance:
                 continue  # Fully paid — not a concern
+
+            # Skip if any delivery exists
+            if order.deliveries:
+                continue
 
             # Avoid duplicate ageing exceptions in same run
             from src.models.exceptions import OrderException

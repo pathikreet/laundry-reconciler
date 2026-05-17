@@ -443,3 +443,11 @@ All settings can be overridden via `.env` file or environment variables (pydanti
 ## License
 
 Private — Internal use only.
+
+## Future Roadmap: Agentic Capabilities
+
+To further reduce manual intervention and leverage AI directly within the reconciliation workflow, the following **agentic capabilities** are planned:
+
+1. **AI Reconciliation Assistant:** An LLM-powered agent that can analyze raised exceptions and automatically generate plain-English explanations of *why* they occurred (e.g., cross-referencing cash deficits with previous days' surpluses to explain a `SuspectedBackdatedCashPayment`).
+2. **Automated Follow-up Drafter:** An agent that monitors `DeliveredMissingNotepad` or `PaymentNotConfirmedByNotepad` exceptions and drafts personalized SMS/WhatsApp follow-up messages to the specific runners involved, prompting them to submit missing entries.
+3. **Smart Exception Resolution:** An agent capable of "auto-resolving" low-confidence or low-severity exceptions based on historical resolution patterns and credit policies, leaving only complex anomalies for human review.

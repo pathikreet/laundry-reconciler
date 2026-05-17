@@ -471,17 +471,17 @@ def render_notepad_step(session_db, is_unlocked):
         with st.expander("➕ Add Order Details", expanded=len(st.session_state.notepad_entries) == 0):
             col1, col2 = st.columns(2)
             with col1:
-                entry_date = st.date_input("Delivery Date", value=date.today(), key="np_date")
+                entry_date = st.date_input("Delivery Date*", value=date.today(), key="np_date", help="Required field")
                 entry_customer = st.text_input("Customer Name (optional)", key="np_customer")
-                entry_order = st.text_input("Order Number", key="np_order",
-                                           placeholder="e.g. T697")
-                entry_runner = st.text_input("Runner Name", key="np_runner")
+                entry_order = st.text_input("Order Number*", key="np_order",
+                                           placeholder="e.g. T697", help="Required field")
+                entry_runner = st.text_input("Runner Name*", key="np_runner", help="Required field")
             with col2:
-                entry_amount = st.number_input("Amount Collected (₹)", min_value=0.0,
-                                              step=10.0, key="np_amount")
-                entry_mode = st.selectbox("Payment Mode", 
+                entry_amount = st.number_input("Amount Collected (₹)*", min_value=0.0,
+                                              step=10.0, key="np_amount", help="Required field")
+                entry_mode = st.selectbox("Payment Mode*",
                                          ["Cash", "Google Pay", "Paytm", "Package", "Card", "Other"],
-                                         key="np_mode")
+                                         key="np_mode", help="Required field")
                 entry_notes = st.text_area("Notes (optional)", key="np_notes",
                                           placeholder="Any remarks...", height=68)
 
@@ -498,7 +498,7 @@ def render_notepad_step(session_db, is_unlocked):
                         'runner_name': entry_runner,
                         'notes': entry_notes,
                     })
-                    st.success(f"Added entry for {entry_customer or entry_order}")
+                    st.toast(f"✅ Added entry for {entry_customer or entry_order}", icon="✅")
                     st.rerun()
 
         # ── Show queued entries ──
@@ -2553,7 +2553,7 @@ def page_order_lookup(session_db):
         return
 
     if not query:
-        st.warning("Please enter an order number to search.")
+        st.info("ℹ️ Please enter an order number to search.")
         return
 
     # ── Find matching orders (exact first, then partial) ──
@@ -2873,14 +2873,14 @@ def page_order_lookup(session_db):
 # ── Main App ──────────────────────────────────────────────
 
 st.set_page_config(
-    page_title="Digital Accountant",
+    page_title="Laundry Reconciler",
     page_icon="🧺",
     layout="wide"
 )
 
 load_css()
 
-st.title("🧺 Digital Accountant")
+st.title("🧺 Laundry Reconciler")
 
 # Sidebar navigation
 st.sidebar.title("Navigation")

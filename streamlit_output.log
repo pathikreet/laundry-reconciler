@@ -1,6 +1,7 @@
 
 Collecting usage statistics. To deactivate, set browser.gatherUsageStats to false.
 
+2026-05-15 05:03:01.453 Uvicorn server started on 0.0.0.0:8501
 
   You can now view your Streamlit app in your browser.
 
@@ -8,155 +9,190 @@ Collecting usage statistics. To deactivate, set browser.gatherUsageStats to fals
   Network URL: http://192.168.0.2:8501
   External URL: http://34.27.142.64:8501
 
-2026-03-21 17:08:52.615 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1180, in <module>
-    page_results(session_db)
-  File "/app/src/ui/app.py", line 750, in page_results
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-2026-03-21 17:09:14.522 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1180, in <module>
-    page_results(session_db)
-  File "/app/src/ui/app.py", line 750, in page_results
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-2026-03-21 17:09:48.707 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1180, in <module>
-    page_results(session_db)
-  File "/app/src/ui/app.py", line 750, in page_results
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-2026-03-21 17:10:19.055 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1180, in <module>
-    page_results(session_db)
-  File "/app/src/ui/app.py", line 750, in page_results
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-2026-03-21 17:10:38.779 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1180, in <module>
-    page_results(session_db)
-  File "/app/src/ui/app.py", line 750, in page_results
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-2026-03-21 17:10:39.232 Uncaught app execution
-Traceback (most recent call last):
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/exec_code.py", line 129, in exec_func_with_error_handling
-    result = func()
-             ^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/scriptrunner/script_runner.py", line 689, in code_to_exec
-    exec(code, module.__dict__)  # noqa: S102
-    ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/app/src/ui/app.py", line 1182, in <module>
-    page_history(session_db)
-  File "/app/src/ui/app.py", line 1146, in page_history
-    st.session_state['nav_radio'] = "Run Reconciliation"
-    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/metrics_util.py", line 532, in wrapped_func
-    result = non_optional_func(*args, **kwargs)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state_proxy.py", line 114, in __setitem__
-    get_session_state()[key] = value
-    ~~~~~~~~~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/safe_session_state.py", line 109, in __setitem__
-    self._state[key] = value
-    ~~~~~~~~~~~^^^^^
-  File "/home/jules/.pyenv/versions/3.12.13/lib/python3.12/site-packages/streamlit/runtime/state/session_state.py", line 591, in __setitem__
-    raise StreamlitAPIException(
-streamlit.errors.StreamlitAPIException: `st.session_state.nav_radio` cannot be modified after the widget with key `nav_radio` is instantiated.
-Database initialized at laundry_reconciler.db
-  Stopping...
+2026-05-15 05:04:14.889 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-05-15 05:04:17,223 [INFO] src.services.matching: Notepad matching: {'exact': 0, 'fuzzy': 0, 'unmatched': 0, 'total': 0}
+2026-05-15 05:04:17,384 [INFO] src.services.matching: MSWIPE matching: {'matched': 47, 'ambiguous': 26, 'unmatched': 19, 'total': 92}
+2026-05-15 05:04:17,579 [INFO] src.services.reconciliation: Reconciliation complete for 2026-05-15: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:04:20,553 [INFO] src.services.matching: Notepad matching: {'exact': 0, 'fuzzy': 0, 'unmatched': 0, 'total': 0}
+2026-05-15 05:04:20,657 [INFO] src.services.matching: MSWIPE matching: {'matched': 0, 'ambiguous': 26, 'unmatched': 19, 'total': 45}
+2026-05-15 05:04:20,742 [INFO] src.services.reconciliation: CashUndeposited: Rs 1688.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-01 (gap=Rs 1688.00, pkg=Rs 0.00)
+2026-05-15 05:04:20,788 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-01: 9 order exceptions, 2 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:04:20,837 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-02: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:04:20,888 [INFO] src.services.reconciliation: CashUndeposited: Rs 2124.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-03 (gap=Rs 2124.00, pkg=Rs 0.00)
+2026-05-15 05:04:20,927 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-03: 7 order exceptions, 2 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:04:20,961 [INFO] src.services.reconciliation: CashUndeposited: Rs 638.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-04 (gap=Rs 638.00, pkg=Rs 0.00)
+2026-05-15 05:04:21,000 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-04: 4 order exceptions, 1 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:04:21,033 [INFO] src.services.reconciliation: CashUndeposited: Rs 1830.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-05 (gap=Rs 1830.00, pkg=Rs 0.00)
+2026-05-15 05:04:21,074 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-05: 4 order exceptions, 1 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:04:21,115 [INFO] src.services.reconciliation: CashUndeposited: Rs 2552.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-06 (gap=Rs 2552.00, pkg=Rs 0.00)
+2026-05-15 05:04:21,159 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-06: 6 order exceptions, 2 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:04:21,207 [INFO] src.services.reconciliation: CashUndeposited: Rs 2439.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-07 (gap=Rs 2439.00, pkg=Rs 0.00)
+2026-05-15 05:04:21,251 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-07: 7 order exceptions, 2 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:04:21,272 [INFO] src.services.reconciliation: CashUndeposited: Rs 200.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-08 (gap=Rs 200.00, pkg=Rs 0.00)
+2026-05-15 05:04:21,318 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-08: 1 order exceptions, 1 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:04:21,366 [INFO] src.services.reconciliation: CashUndeposited: Rs 770.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-09 (gap=Rs 770.00, pkg=Rs 0.00)
+2026-05-15 05:04:21,414 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=44, ₹150.00 — MSWIPE date 2025-11-07 vs CRM date 2025-11-09
+2026-05-15 05:04:21,418 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=52, ₹450.00 — MSWIPE date 2025-11-06 vs CRM date 2025-11-09
+2026-05-15 05:04:21,421 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=53, ₹403.00 — MSWIPE date 2025-11-06 vs CRM date 2025-11-09
+2026-05-15 05:04:21,424 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=54, ₹520.00 — MSWIPE date 2025-11-06 vs CRM date 2025-11-09
+2026-05-15 05:04:21,427 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=55, ₹488.00 — MSWIPE date 2025-11-06 vs CRM date 2025-11-09
+2026-05-15 05:04:21,430 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=58, ₹216.00 — MSWIPE date 2025-11-07 vs CRM date 2025-11-09
+2026-05-15 05:04:21,438 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-09: 4 order exceptions, 2 day exceptions, 0 ageing, 6 backdated
+2026-05-15 05:04:21,472 [INFO] src.services.reconciliation: CashUndeposited: Rs 2110.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-10 (gap=Rs 2110.00, pkg=Rs 0.00)
+2026-05-15 05:04:21,522 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-10: 3 order exceptions, 2 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:04:21,561 [INFO] src.services.reconciliation: CashUndeposited: Rs 2341.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-11 (gap=Rs 2341.00, pkg=Rs 0.00)
+2026-05-15 05:04:21,625 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-11: 5 order exceptions, 1 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:04:21,683 [INFO] src.services.reconciliation: CashUndeposited: Rs 2460.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-12 (gap=Rs 2460.00, pkg=Rs 0.00)
+2026-05-15 05:04:21,740 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=75, ₹400.00 — MSWIPE date 2025-11-04 vs CRM date 2025-11-12
+2026-05-15 05:04:21,752 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-12: 11 order exceptions, 2 day exceptions, 0 ageing, 1 backdated
+2026-05-15 05:04:21,804 [INFO] src.services.reconciliation: CashUndeposited: Rs 1632.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-13 (gap=Rs 1632.00, pkg=Rs 0.00)
+2026-05-15 05:04:21,863 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=84, ₹278.00 — MSWIPE date 2025-11-11 vs CRM date 2025-11-13
+2026-05-15 05:04:21,867 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=89, ₹278.00 — MSWIPE date 2025-11-11 vs CRM date 2025-11-13
+2026-05-15 05:04:21,877 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-13: 7 order exceptions, 2 day exceptions, 0 ageing, 2 backdated
+2026-05-15 05:04:21,962 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-14: 1 order exceptions, 1 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:04:22,039 [INFO] src.services.reconciliation: CashUndeposited: Rs 4830.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-15 (gap=Rs 4830.00, pkg=Rs 0.00)
+2026-05-15 05:04:22,104 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=93, ₹880.00 — MSWIPE date 2025-11-13 vs CRM date 2025-11-15
+2026-05-15 05:04:22,110 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=104, ₹383.00 — MSWIPE date 2025-11-14 vs CRM date 2025-11-15
+2026-05-15 05:04:22,113 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=106, ₹220.00 — MSWIPE date 2025-11-13 vs CRM date 2025-11-15
+2026-05-15 05:04:22,123 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-15: 16 order exceptions, 2 day exceptions, 0 ageing, 3 backdated
+2026-05-15 05:04:22,213 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-16: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:04:22,247 [INFO] src.services.reconciliation: CashUndeposited: Rs 2344.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-17 (gap=Rs 2344.00, pkg=Rs 0.00)
+2026-05-15 05:04:22,325 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-17: 5 order exceptions, 1 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:04:22,356 [INFO] src.services.reconciliation: CashUndeposited: Rs 500.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-18 (gap=Rs 500.00, pkg=Rs 0.00)
+2026-05-15 05:04:22,430 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=120, ₹600.00 — MSWIPE date 2025-11-12 vs CRM date 2025-11-18
+2026-05-15 05:04:22,438 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-18: 3 order exceptions, 2 day exceptions, 0 ageing, 1 backdated
+2026-05-15 05:04:22,486 [INFO] src.services.reconciliation: CashUndeposited: Rs 1840.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-19 (gap=Rs 1840.00, pkg=Rs 0.00)
+2026-05-15 05:04:22,562 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=122, ₹430.00 — MSWIPE date 2025-11-18 vs CRM date 2025-11-19
+2026-05-15 05:04:22,566 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=129, ₹600.00 — MSWIPE date 2025-11-18 vs CRM date 2025-11-19
+2026-05-15 05:04:22,576 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-19: 8 order exceptions, 2 day exceptions, 0 ageing, 2 backdated
+2026-05-15 05:04:22,600 [INFO] src.services.reconciliation: CashUndeposited: Rs 950.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-20 (gap=Rs 950.00, pkg=Rs 0.00)
+2026-05-15 05:04:22,686 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-20: 2 order exceptions, 2 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:04:22,726 [INFO] src.services.reconciliation: CashUndeposited: Rs 2434.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-21 (gap=Rs 2434.00, pkg=Rs 0.00)
+2026-05-15 05:04:22,819 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-21: 5 order exceptions, 2 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:04:22,885 [INFO] src.services.reconciliation: CashUndeposited: Rs 2365.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-22 (gap=Rs 2365.00, pkg=Rs 0.00)
+2026-05-15 05:04:22,972 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=139, ₹350.00 — MSWIPE date 2025-11-21 vs CRM date 2025-11-22
+2026-05-15 05:04:22,977 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=152, ₹300.00 — MSWIPE date 2025-11-12 vs CRM date 2025-11-22
+2026-05-15 05:04:22,988 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-22: 13 order exceptions, 1 day exceptions, 0 ageing, 2 backdated
+2026-05-15 05:04:23,039 [INFO] src.services.reconciliation: CashUndeposited: Rs 2935.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-23 (gap=Rs 2935.00, pkg=Rs 0.00)
+2026-05-15 05:04:23,132 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=156, ₹760.00 — MSWIPE date 2025-11-21 vs CRM date 2025-11-23
+2026-05-15 05:04:23,140 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=160, ₹920.00 — MSWIPE date 2025-11-19 vs CRM date 2025-11-23
+2026-05-15 05:04:23,144 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=165, ₹832.00 — MSWIPE date 2025-11-21 vs CRM date 2025-11-23
+2026-05-15 05:04:23,147 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=166, ₹350.00 — MSWIPE date 2025-11-22 vs CRM date 2025-11-23
+2026-05-15 05:04:23,155 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-23: 9 order exceptions, 2 day exceptions, 0 ageing, 4 backdated
+2026-05-15 05:04:23,192 [INFO] src.services.reconciliation: CashUndeposited: Rs 670.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-24 (gap=Rs 670.00, pkg=Rs 0.00)
+2026-05-15 05:04:23,296 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-24: 4 order exceptions, 2 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:04:23,331 [INFO] src.services.reconciliation: CashUndeposited: Rs 960.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-25 (gap=Rs 960.00, pkg=Rs 0.00)
+2026-05-15 05:04:23,434 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=174, ₹300.00 — MSWIPE date 2025-11-22 vs CRM date 2025-11-25
+2026-05-15 05:04:23,437 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=175, ₹540.00 — MSWIPE date 2025-11-11 vs CRM date 2025-11-25
+2026-05-15 05:04:23,440 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=176, ₹352.00 — MSWIPE date 2025-11-22 vs CRM date 2025-11-25
+2026-05-15 05:04:23,449 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-25: 4 order exceptions, 2 day exceptions, 0 ageing, 3 backdated
+2026-05-15 05:04:23,491 [INFO] src.services.reconciliation: CashUndeposited: Rs 1810.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-26 (gap=Rs 1810.00, pkg=Rs 0.00)
+2026-05-15 05:04:23,593 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=183, ₹320.00 — MSWIPE date 2025-11-25 vs CRM date 2025-11-26
+2026-05-15 05:04:23,603 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-26: 5 order exceptions, 2 day exceptions, 0 ageing, 1 backdated
+2026-05-15 05:04:23,656 [INFO] src.services.reconciliation: CashUndeposited: Rs 990.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-27 (gap=Rs 990.00, pkg=Rs 0.00)
+2026-05-15 05:04:23,766 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=186, ₹350.00 — MSWIPE date 2025-11-25 vs CRM date 2025-11-27
+2026-05-15 05:04:23,769 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=187, ₹400.00 — MSWIPE date 2025-11-26 vs CRM date 2025-11-27
+2026-05-15 05:04:23,773 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=188, ₹480.00 — MSWIPE date 2025-11-15 vs CRM date 2025-11-27
+2026-05-15 05:04:23,777 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=189, ₹540.00 — MSWIPE date 2025-11-25 vs CRM date 2025-11-27
+2026-05-15 05:04:23,781 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=192, ₹320.00 — MSWIPE date 2025-11-26 vs CRM date 2025-11-27
+2026-05-15 05:04:23,793 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-27: 8 order exceptions, 2 day exceptions, 0 ageing, 5 backdated
+2026-05-15 05:36:44.740 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-05-15 05:36:47,983 [INFO] src.services.matching: Notepad matching: {'exact': 0, 'fuzzy': 0, 'unmatched': 0, 'total': 0}
+2026-05-15 05:36:48,079 [INFO] src.services.matching: MSWIPE matching: {'matched': 0, 'ambiguous': 26, 'unmatched': 19, 'total': 45}
+2026-05-15 05:36:48,298 [INFO] src.services.reconciliation: Reconciliation complete for 2026-05-15: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:36:51,359 [INFO] src.services.matching: Notepad matching: {'exact': 0, 'fuzzy': 0, 'unmatched': 0, 'total': 0}
+2026-05-15 05:36:51,442 [INFO] src.services.matching: MSWIPE matching: {'matched': 0, 'ambiguous': 26, 'unmatched': 19, 'total': 45}
+2026-05-15 05:36:51,541 [INFO] src.services.reconciliation: CashUndeposited: Rs 1688.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-01 (gap=Rs 1688.00, pkg=Rs 0.00)
+2026-05-15 05:36:51,586 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-01: 9 order exceptions, 2 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:36:51,636 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-02: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:36:51,689 [INFO] src.services.reconciliation: CashUndeposited: Rs 2124.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-03 (gap=Rs 2124.00, pkg=Rs 0.00)
+2026-05-15 05:36:51,727 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-03: 7 order exceptions, 2 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:36:51,767 [INFO] src.services.reconciliation: CashUndeposited: Rs 638.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-04 (gap=Rs 638.00, pkg=Rs 0.00)
+2026-05-15 05:36:51,808 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-04: 4 order exceptions, 1 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:36:51,855 [INFO] src.services.reconciliation: CashUndeposited: Rs 1830.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-05 (gap=Rs 1830.00, pkg=Rs 0.00)
+2026-05-15 05:36:51,900 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-05: 4 order exceptions, 1 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:36:51,954 [INFO] src.services.reconciliation: CashUndeposited: Rs 2552.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-06 (gap=Rs 2552.00, pkg=Rs 0.00)
+2026-05-15 05:36:51,999 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-06: 6 order exceptions, 2 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:36:52,058 [INFO] src.services.reconciliation: CashUndeposited: Rs 2439.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-07 (gap=Rs 2439.00, pkg=Rs 0.00)
+2026-05-15 05:36:52,106 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-07: 7 order exceptions, 2 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:36:52,133 [INFO] src.services.reconciliation: CashUndeposited: Rs 200.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-08 (gap=Rs 200.00, pkg=Rs 0.00)
+2026-05-15 05:36:52,187 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-08: 1 order exceptions, 1 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:36:52,234 [INFO] src.services.reconciliation: CashUndeposited: Rs 770.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-09 (gap=Rs 770.00, pkg=Rs 0.00)
+2026-05-15 05:36:52,285 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=44, ₹150.00 — MSWIPE date 2025-11-07 vs CRM date 2025-11-09
+2026-05-15 05:36:52,288 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=52, ₹450.00 — MSWIPE date 2025-11-06 vs CRM date 2025-11-09
+2026-05-15 05:36:52,292 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=53, ₹403.00 — MSWIPE date 2025-11-06 vs CRM date 2025-11-09
+2026-05-15 05:36:52,295 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=54, ₹520.00 — MSWIPE date 2025-11-06 vs CRM date 2025-11-09
+2026-05-15 05:36:52,298 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=55, ₹488.00 — MSWIPE date 2025-11-06 vs CRM date 2025-11-09
+2026-05-15 05:36:52,301 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=58, ₹216.00 — MSWIPE date 2025-11-07 vs CRM date 2025-11-09
+2026-05-15 05:36:52,309 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-09: 4 order exceptions, 2 day exceptions, 0 ageing, 6 backdated
+2026-05-15 05:36:52,346 [INFO] src.services.reconciliation: CashUndeposited: Rs 2110.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-10 (gap=Rs 2110.00, pkg=Rs 0.00)
+2026-05-15 05:36:52,398 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-10: 3 order exceptions, 2 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:36:52,437 [INFO] src.services.reconciliation: CashUndeposited: Rs 2341.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-11 (gap=Rs 2341.00, pkg=Rs 0.00)
+2026-05-15 05:36:52,504 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-11: 5 order exceptions, 1 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:36:52,576 [INFO] src.services.reconciliation: CashUndeposited: Rs 2460.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-12 (gap=Rs 2460.00, pkg=Rs 0.00)
+2026-05-15 05:36:52,638 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=75, ₹400.00 — MSWIPE date 2025-11-04 vs CRM date 2025-11-12
+2026-05-15 05:36:52,655 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-12: 11 order exceptions, 2 day exceptions, 0 ageing, 1 backdated
+2026-05-15 05:36:52,708 [INFO] src.services.reconciliation: CashUndeposited: Rs 1632.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-13 (gap=Rs 1632.00, pkg=Rs 0.00)
+2026-05-15 05:36:52,772 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=84, ₹278.00 — MSWIPE date 2025-11-11 vs CRM date 2025-11-13
+2026-05-15 05:36:52,778 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=89, ₹278.00 — MSWIPE date 2025-11-11 vs CRM date 2025-11-13
+2026-05-15 05:36:52,785 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-13: 7 order exceptions, 2 day exceptions, 0 ageing, 2 backdated
+2026-05-15 05:36:52,901 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-14: 1 order exceptions, 1 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:36:53,001 [INFO] src.services.reconciliation: CashUndeposited: Rs 4830.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-15 (gap=Rs 4830.00, pkg=Rs 0.00)
+2026-05-15 05:36:53,069 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=93, ₹880.00 — MSWIPE date 2025-11-13 vs CRM date 2025-11-15
+2026-05-15 05:36:53,075 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=104, ₹383.00 — MSWIPE date 2025-11-14 vs CRM date 2025-11-15
+2026-05-15 05:36:53,078 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=106, ₹220.00 — MSWIPE date 2025-11-13 vs CRM date 2025-11-15
+2026-05-15 05:36:53,087 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-15: 16 order exceptions, 2 day exceptions, 0 ageing, 3 backdated
+2026-05-15 05:36:53,184 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-16: 0 order exceptions, 0 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:36:53,224 [INFO] src.services.reconciliation: CashUndeposited: Rs 2344.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-17 (gap=Rs 2344.00, pkg=Rs 0.00)
+2026-05-15 05:36:53,303 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-17: 5 order exceptions, 1 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:36:53,344 [INFO] src.services.reconciliation: CashUndeposited: Rs 500.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-18 (gap=Rs 500.00, pkg=Rs 0.00)
+2026-05-15 05:36:53,426 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=120, ₹600.00 — MSWIPE date 2025-11-12 vs CRM date 2025-11-18
+2026-05-15 05:36:53,434 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-18: 3 order exceptions, 2 day exceptions, 0 ageing, 1 backdated
+2026-05-15 05:36:53,494 [INFO] src.services.reconciliation: CashUndeposited: Rs 1840.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-19 (gap=Rs 1840.00, pkg=Rs 0.00)
+2026-05-15 05:36:53,573 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=122, ₹430.00 — MSWIPE date 2025-11-18 vs CRM date 2025-11-19
+2026-05-15 05:36:53,578 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=129, ₹600.00 — MSWIPE date 2025-11-18 vs CRM date 2025-11-19
+2026-05-15 05:36:53,586 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-19: 8 order exceptions, 2 day exceptions, 0 ageing, 2 backdated
+2026-05-15 05:36:53,615 [INFO] src.services.reconciliation: CashUndeposited: Rs 950.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-20 (gap=Rs 950.00, pkg=Rs 0.00)
+2026-05-15 05:36:53,707 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-20: 2 order exceptions, 2 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:36:53,759 [INFO] src.services.reconciliation: CashUndeposited: Rs 2434.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-21 (gap=Rs 2434.00, pkg=Rs 0.00)
+2026-05-15 05:36:53,863 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-21: 5 order exceptions, 2 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:36:53,938 [INFO] src.services.reconciliation: CashUndeposited: Rs 2365.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-22 (gap=Rs 2365.00, pkg=Rs 0.00)
+2026-05-15 05:36:54,038 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=139, ₹350.00 — MSWIPE date 2025-11-21 vs CRM date 2025-11-22
+2026-05-15 05:36:54,043 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=152, ₹300.00 — MSWIPE date 2025-11-12 vs CRM date 2025-11-22
+2026-05-15 05:36:54,053 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-22: 13 order exceptions, 1 day exceptions, 0 ageing, 2 backdated
+2026-05-15 05:36:54,111 [INFO] src.services.reconciliation: CashUndeposited: Rs 2935.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-23 (gap=Rs 2935.00, pkg=Rs 0.00)
+2026-05-15 05:36:54,256 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=156, ₹760.00 — MSWIPE date 2025-11-21 vs CRM date 2025-11-23
+2026-05-15 05:36:54,265 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=160, ₹920.00 — MSWIPE date 2025-11-19 vs CRM date 2025-11-23
+2026-05-15 05:36:54,272 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=165, ₹832.00 — MSWIPE date 2025-11-21 vs CRM date 2025-11-23
+2026-05-15 05:36:54,282 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=166, ₹350.00 — MSWIPE date 2025-11-22 vs CRM date 2025-11-23
+2026-05-15 05:36:54,299 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-23: 9 order exceptions, 2 day exceptions, 0 ageing, 4 backdated
+2026-05-15 05:36:54,448 [INFO] src.services.reconciliation: CashUndeposited: Rs 670.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-24 (gap=Rs 670.00, pkg=Rs 0.00)
+2026-05-15 05:36:54,634 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-24: 4 order exceptions, 2 day exceptions, 0 ageing, 0 backdated
+2026-05-15 05:36:54,791 [INFO] src.services.reconciliation: CashUndeposited: Rs 960.00 CRM cash vs Rs 0.00 register (adj) on 2025-11-25 (gap=Rs 960.00, pkg=Rs 0.00)
+2026-05-15 05:36:55,022 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=174, ₹300.00 — MSWIPE date 2025-11-22 vs CRM date 2025-11-25
+2026-05-15 05:36:55,029 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=175, ₹540.00 — MSWIPE date 2025-11-11 vs CRM date 2025-11-25
+2026-05-15 05:36:55,037 [INFO] src.services.reconciliation: BackdatedGPayPayment: order_id=176, ₹352.00 — MSWIPE date 2025-11-22 vs CRM date 2025-11-25
+2026-05-15 05:36:55,055 [INFO] src.services.reconciliation: Reconciliation complete for 2025-11-25: 4 order exceptions, 2 day exceptions, 0 ageing, 3 backdated
+2026-05-15 05:37:32.854 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-05-15 05:38:23.118 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
+2026-05-15 05:42:37.475 Please replace `use_container_width` with `width`.
+
+`use_container_width` will be removed after 2025-12-31.
+
+For `use_container_width=True`, use `width='stretch'`. For `use_container_width=False`, use `width='content'`.
