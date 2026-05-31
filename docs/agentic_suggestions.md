@@ -24,5 +24,5 @@ The `MatchingService` currently relies on static fuzzy matching thresholds.
 
 ## 5. Agentic Chat Interface (Co-Pilot)
 Information density in the dashboard can be overwhelming.
-* **Suggestion:** Add a conversational interface (a "Digital Accountant Co-Pilot").
-* **How it works:** Users could ask natural language questions like "Show me all orders from last week where cash was missing" or "Why was order T450 flagged?" The agent would translate these into SQL/ORM queries, summarize the findings, and navigate the user to the correct drill-down view.
+* **Suggestion:** Instead of building a full standalone chat interface, develop a reusable "Skill" (e.g., leveraging MCP or APIs) that integrates the Digital Accountant with existing chat interfaces like Gemini, ChatGPT, Claude, or Grok.
+* **How it works:** This skill would expose the app's data models and query logic (e.g., fetching exceptions, querying order status) to external LLMs. Users could then interact with their preferred chat tool to ask questions like "Show me all orders from last week where cash was missing" or "Why was order T450 flagged?", while keeping the conversation grounded in actual database context without reinventing the chat UI.
