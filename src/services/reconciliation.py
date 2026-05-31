@@ -639,6 +639,9 @@ class ReconciliationService:
             if balance <= self.credit_tolerance:
                 continue  # Fully paid — not a concern
 
+            if order.deliveries:
+                continue # Has delivery event - not a concern
+
             # Avoid duplicate ageing exceptions in same run
             from src.models.exceptions import OrderException
             already_flagged = self.db.query(OrderException).filter_by(

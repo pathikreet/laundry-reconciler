@@ -282,7 +282,7 @@ def test_gpay_order_mismatch(session):
     ).first()
 
     assert exception is not None
-    assert exception.severity == 'medium'
+    assert exception.severity == 'high'
     assert exception.evidence['missing_source'] == 'MSWIPE'
 
 
