@@ -1018,12 +1018,6 @@ class ReconciliationService:
             ).scalar() or 0.0
         )
 
-        net_gpay_variance = round(crm_gpay_total - mswipe_total, 2)
-        # derived_cash_from_orders already includes expenses + bank deposits,
-        # so compare directly without adding them back
-        net_cash_variance = round(notepad_cash_total - register_cash_total, 2)
-        net_crm_vs_register_variance = round(crm_cash_total - register_cash_total, 2)
-
         # ── Gather all exceptions for the period ──────────────
         runs = self.db.query(ReconciliationRun).filter(
             ReconciliationRun.run_date >= start_date,

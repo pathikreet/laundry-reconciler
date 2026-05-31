@@ -1468,16 +1468,39 @@ def page_results(session_db):
         cash_variance = [e for e in exceptions if e.exception_type == 'CashVariance']
         if cash_fraud:
             st.error(f"🚨 **{len(cash_fraud)} Cash Fraud Alert(s)** — CRM cash was never deposited in the register.")
+            
+            def style_gap(val):
+                try:
+                    val_str = str(val).replace('₹', '').replace(',', '').replace('+', '')
+                    numeric_val = float(val_str)
+                    if numeric_val <= -10:
+                        return 'color: #ff4b4b; font-weight: bold;'  # Red for shortfall
+                    elif numeric_val >= 10:
+                        return 'color: #00c04b; font-weight: bold;'  # Green for surplus
+                except:
+                    pass
+                return ''
+
             fraud_rows = []
             for e in cash_fraud:
                 ev = e.evidence or {}
+                actual = float(ev.get('register_derived_cash', ev.get('register_cash_total', 0)))
+                crm = float(ev.get('crm_cash_total', 0))
+                gap_val = actual - crm
+                
+                if gap_val < 0:
+                    formatted_gap = f"-₹{abs(gap_val):,.0f}"
+                else:
+                    formatted_gap = f"+₹{gap_val:,.0f}"
+
                 fraud_rows.append({
                     'Date': str(run_date_map.get(e.reconciliation_run_id, '—')),
-                    'CRM Cash': f"₹{ev.get('crm_cash_total', 0):,.0f}",
-                    'Register Derived': f"₹{ev.get('register_derived_cash', ev.get('register_cash_total', 0)):,.0f}",
-                    'Gap': f"₹{ev.get('undeposited_amount', ev.get('diff', 0)):,.0f}",
+                    'CRM Cash': f"₹{crm:,.0f}",
+                    'Register Derived': f"₹{actual:,.0f}",
+                    'Gap': formatted_gap,
                 })
-            st.dataframe(pd.DataFrame(fraud_rows), width='stretch', hide_index=True)
+            df_cash_fraud = pd.DataFrame(fraud_rows)
+            st.dataframe(df_cash_fraud.style.applymap(style_gap, subset=['Gap']), width='stretch', hide_index=True)
             with st.expander("🔎 Drill down — orders with cash on flagged dates", expanded=False):
                 for e in cash_fraud:
                     ev = e.evidence or {}
@@ -1508,13 +1531,27 @@ def page_results(session_db):
         gpay_alerts = [e for e in exceptions if e.exception_type == 'GPayMismatch']
         if gpay_alerts:
             st.warning(f"💳 **{len(gpay_alerts)} GPay Discrepancy(ies)**")
-            st.dataframe(pd.DataFrame([{
-                'Date': str(run_date_map.get(e.reconciliation_run_id, '—')),
-                'CRM GPay': f"₹{(e.evidence or {}).get('crm_gpay', 0):,.0f}",
-                'MSWIPE': f"₹{(e.evidence or {}).get('mswipe_gpay', 0):,.0f}",
-                'Variance': f"₹{(e.evidence or {}).get('diff', 0):,.0f}",
-                'Severity': '🔴' if e.severity == 'high' else '🟡',
-            } for e in gpay_alerts]), width='stretch', hide_index=True)
+            gpay_rows = []
+            for e in gpay_alerts:
+                ev = e.evidence or {}
+                actual = float(ev.get('mswipe_gpay', 0))
+                crm = float(ev.get('crm_gpay', 0))
+                gap_val = actual - crm
+                
+                if gap_val < 0:
+                    formatted_gap = f"-₹{abs(gap_val):,.0f}"
+                else:
+                    formatted_gap = f"+₹{gap_val:,.0f}"
+
+                gpay_rows.append({
+                    'Date': str(run_date_map.get(e.reconciliation_run_id, '—')),
+                    'CRM GPay': f"₹{crm:,.0f}",
+                    'MSWIPE': f"₹{actual:,.0f}",
+                    'Variance': formatted_gap,
+                    'Severity': '🔴' if e.severity == 'high' else '🟡',
+                })
+            df_gpay = pd.DataFrame(gpay_rows)
+            st.dataframe(df_gpay.style.applymap(style_gap, subset=['Variance']), width='stretch', hide_index=True)
         else:
             st.success("✅ GPay totals match MSWIPE.")
         st.divider()
@@ -1536,13 +1573,29 @@ def page_results(session_db):
         ageing_alerts = [e for e in exceptions if e.exception_type == 'AgeingOrder']
         if ageing_alerts:
             with st.expander(f"⏰ {len(ageing_alerts)} Ageing Order(s) — old orders with outstanding balance", expanded=False):
-                st.dataframe(pd.DataFrame([{
+                ageing_rows = [{
                     'Order #': e.order.order_number if e.order else '—',
                     'Customer': e.order.customer_name if e.order else '—',
                     'Days Old': (e.evidence or {}).get('days_since_order', '—'),
                     'Balance': f"₹{(e.evidence or {}).get('balance', 0):,.0f}",
-                } for e in sorted(ageing_alerts, key=lambda x: (x.evidence or {}).get('days_since_order', 0), reverse=True)
-                ]), width='stretch', hide_index=True)
+                } for e in sorted(ageing_alerts, key=lambda x: (x.evidence or {}).get('days_since_order', 0), reverse=True)]
+                
+                df_ageing = pd.DataFrame(ageing_rows)
+                st.dataframe(df_ageing, width='stretch', hide_index=True)
+                
+                # Excel Export: Ageing orders
+                import io
+                buf_ageing = io.BytesIO()
+                with pd.ExcelWriter(buf_ageing, engine='xlsxwriter') as ew:
+                    df_ageing.to_excel(ew, sheet_name='Ageing_Orders', index=False)
+                
+                clean_date = date_label.replace(' ', '_').replace(',', '')
+                st.download_button(
+                    label="📥 Export Ageing Orders to Excel",
+                    data=buf_ageing.getvalue(),
+                    file_name=f"ageing_orders_{clean_date}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
 
         # ── Backdated Detections (collapsed) ──
         bd_gpay = [e for e in exceptions if e.exception_type == 'BackdatedGPayPayment']
@@ -1699,7 +1752,7 @@ def page_results(session_db):
         # FRAUD VECTORS: Cash, GPay/UPI, Card — staff can manually mark
         # these in CRM. Verified against Register (cash) and MSWIPE (online).
         # SAFE (auto-recorded): Paytm (QR scan), Package (wallet deduction).
-        cash_gap = crm_cash - register_orders_only
+        cash_gap = register_orders_only - crm_cash
 
         # GPay/UPI/Card: staff-entered → verify against MSWIPE
         crm_gpay_card = crm_gpay  # GPay/UPI modes
@@ -1710,31 +1763,31 @@ def page_results(session_db):
 
         # MSWIPE covers GPay/UPI/Card actuals (NOT Paytm — that's separate)
         mswipe_orders_only = mswipe_total - pkg_online_total
-        online_fraud_gap = crm_staff_online - mswipe_orders_only
+        online_fraud_gap = mswipe_orders_only - crm_staff_online
 
         # Paytm recon: CRM Paytm vs Paytm QR data (informational only)
-        paytm_recon_gap = crm_paytm_auto - paytm_total
+        paytm_recon_gap = paytm_total - crm_paytm_auto
 
         total_fraud_gap = cash_gap + online_fraud_gap
 
         col_h1, col_h2, col_h3, col_h4 = st.columns(4)
         col_h1.metric(
             "🚨 Cash Risk",
-            f"₹{cash_gap:,.0f}",
-            delta=f"CRM ₹{crm_cash:,.0f} vs Reg ₹{register_orders_only:,.0f}",
-            delta_color="inverse" if cash_gap > 100 else "off",
+            f"₹{abs(cash_gap):,.0f}" if cash_gap < -100 else "✅",
+            delta=f"Gap: ₹{cash_gap:,.0f}",
+            delta_color="normal",
         )
         col_h2.metric(
             "🚨 Online Risk",
-            f"₹{online_fraud_gap:,.0f}",
-            delta=f"CRM ₹{crm_staff_online:,.0f} vs MSWIPE ₹{mswipe_orders_only:,.0f}",
-            delta_color="inverse" if online_fraud_gap > 100 else "off",
+            f"₹{abs(online_fraud_gap):,.0f}" if online_fraud_gap < -100 else "✅",
+            delta=f"Gap: ₹{online_fraud_gap:,.0f}",
+            delta_color="normal",
         )
         col_h3.metric(
             "🚨 Total Fraud Risk",
-            f"₹{total_fraud_gap:,.0f}",
-            delta=f"Cash ₹{cash_gap:,.0f} + Online ₹{online_fraud_gap:,.0f}",
-            delta_color="inverse" if total_fraud_gap > 100 else "off",
+            f"₹{abs(total_fraud_gap):,.0f}" if total_fraud_gap < -100 else "✅",
+            delta=f"Gap: ₹{total_fraud_gap:,.0f}",
+            delta_color="normal",
         )
         col_h4.metric(
             "⚠️ Unpaid 30d+",
@@ -1747,14 +1800,25 @@ def page_results(session_db):
         st.markdown("##### 🚨 Fraud Vectors (staff can manually mark)")
         fraud_rows = []
 
+        def style_gap(val):
+            try:
+                numeric_val = float(str(val).replace('₹', '').replace(',', ''))
+                if numeric_val < -100:
+                    return 'color: #ff4b4b; font-weight: bold;'  # Shortfall (Red)
+                elif numeric_val > 100:
+                    return 'color: #00c04b; font-weight: bold;'  # Surplus (Green)
+            except:
+                pass
+            return ''
+
         # Row 1: Cash
         fraud_rows.append({
             'Category': '💵 Cash',
             'CRM (staff-marked)': f'₹{crm_cash:,.0f}',
             'Actual': f'₹{register_orders_only:,.0f}',
-            'Actual Source': f'Register ₹{register_cash_total:,.0f} - Pkg ₹{pkg_cash_total:,.0f}',
+            'Actual Source': f'Reg ₹{register_cash_total:,.0f} - Pkg ₹{pkg_cash_total:,.0f}',
             'Gap': f'₹{cash_gap:,.0f}',
-            'Risk': '🔴' if cash_gap > 100 else ('🟡' if cash_gap < -100 else '✅'),
+            'Risk': '🔴' if cash_gap < -100 else ('🟡' if cash_gap > 100 else '✅'),
         })
 
         # Row 2: GPay/UPI/Card
@@ -1764,7 +1828,7 @@ def page_results(session_db):
             'Actual': f'₹{mswipe_orders_only:,.0f}',
             'Actual Source': f'MSWIPE ₹{mswipe_total:,.0f} - Pkg ₹{pkg_online_total:,.0f}',
             'Gap': f'₹{online_fraud_gap:,.0f}',
-            'Risk': '🔴' if online_fraud_gap > 100 else ('🟡' if online_fraud_gap < -100 else '✅'),
+            'Risk': '🔴' if online_fraud_gap < -100 else ('🟡' if online_fraud_gap > 100 else '✅'),
         })
 
         # Row 3: Fraud total
@@ -1774,10 +1838,11 @@ def page_results(session_db):
             'Actual': f'₹{register_orders_only + mswipe_orders_only:,.0f}',
             'Actual Source': '',
             'Gap': f'₹{total_fraud_gap:,.0f}',
-            'Risk': '🔴' if total_fraud_gap > 100 else '✅',
+            'Risk': '🔴' if total_fraud_gap < -100 else ('🟡' if total_fraud_gap > 100 else '✅'),
         })
 
-        st.dataframe(pd.DataFrame(fraud_rows), width='stretch', hide_index=True)
+        df_fraud = pd.DataFrame(fraud_rows)
+        st.dataframe(df_fraud.style.applymap(style_gap, subset=['Gap']), width='stretch', hide_index=True)
 
         # ── Safe channels ──
         st.markdown("##### ✅ Auto-Recorded (no fraud possible)")
@@ -1799,20 +1864,21 @@ def page_results(session_db):
             'Note': 'Wallet deduction, no cash movement',
         })
 
-        st.dataframe(pd.DataFrame(safe_rows), width='stretch', hide_index=True)
+        df_safe = pd.DataFrame(safe_rows)
+        st.dataframe(df_safe.style.applymap(style_gap, subset=['Gap']), width='stretch', hide_index=True)
 
         # ── Callouts ──
-        if total_fraud_gap > 100:
+        if total_fraud_gap < -100:
             st.error(
-                f"🚨 **₹{total_fraud_gap:,.0f} fraud risk** — "
+                f"🚨 **₹{abs(total_fraud_gap):,.0f} fraud risk (shortfall)** — "
                 f"Cash: ₹{cash_gap:,.0f} (CRM marked but not in register) · "
                 f"Online: ₹{online_fraud_gap:,.0f} (CRM marked GPay/UPI/Card "
                 f"but not in MSWIPE). Staff can manually mark these "
                 f"payment modes in CRM."
             )
-        elif total_fraud_gap < -100:
+        elif total_fraud_gap > 100:
             st.warning(
-                f"🟡 Actuals exceed CRM by ₹{abs(total_fraud_gap):,.0f} — "
+                f"🟡 Actuals exceed CRM by ₹{total_fraud_gap:,.0f} (surplus) — "
                 f"Register/MSWIPE received more than staff marked in CRM."
             )
         else:
