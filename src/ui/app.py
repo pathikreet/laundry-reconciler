@@ -2432,6 +2432,11 @@ def page_results(session_db):
             st.caption(f"₹{total_ordered:,.0f} ordered · ₹{total_paid:,.0f} paid · ₹{total_ordered - total_paid:,.0f} outstanding")
         else:
             st.info("No orders found for this period.")
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                st.button("📥 Go to Import Data", on_click=navigate_to, args=("Import Data",), use_container_width=True, key="btn_exp_import")
+            with col_btn2:
+                st.button("▶️ Go to Run Reconciliation", on_click=navigate_to, args=("Run Reconciliation",), use_container_width=True, key="btn_exp_recon")
 
         st.divider()
 
@@ -2550,10 +2555,20 @@ def page_order_lookup(session_db):
 
     if not query and not do_search:
         st.info("Enter an order number above and press Search.")
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            st.button("📥 Go to Import Data", on_click=navigate_to, args=("Import Data",), use_container_width=True)
+        with col_btn2:
+            st.button("▶️ Go to Run Reconciliation", on_click=navigate_to, args=("Run Reconciliation",), use_container_width=True)
         return
 
     if not query:
         st.warning("Please enter an order number to search.")
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            st.button("📥 Go to Import Data", on_click=navigate_to, args=("Import Data",), use_container_width=True, key="btn_lookup_import_empty")
+        with col_btn2:
+            st.button("▶️ Go to Run Reconciliation", on_click=navigate_to, args=("Run Reconciliation",), use_container_width=True, key="btn_lookup_recon_empty")
         return
 
     # ── Find matching orders (exact first, then partial) ──
@@ -2569,6 +2584,11 @@ def page_order_lookup(session_db):
 
     if not orders:
         st.error(f"No orders found matching **'{q}'**. Try a shorter prefix or check the order number.")
+        col_btn1, col_btn2 = st.columns(2)
+        with col_btn1:
+            st.button("📥 Go to Import Data", on_click=navigate_to, args=("Import Data",), use_container_width=True, key="btn_lookup_import_notfound")
+        with col_btn2:
+            st.button("▶️ Go to Run Reconciliation", on_click=navigate_to, args=("Run Reconciliation",), use_container_width=True, key="btn_lookup_recon_notfound")
         return
 
     # ── If multiple matches, let user pick ──
