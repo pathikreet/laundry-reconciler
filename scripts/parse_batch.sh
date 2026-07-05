@@ -45,13 +45,18 @@ IDEMPOTENCY
     already-processed images. Delete the state file to force reprocessing.
 
 PREREQUISITES
-    1. Gemini CLI installed and authenticated:
-         npm install -g @google/gemini-cli
-         gemini auth login
+    1. Antigravity CLI installed and authenticated:
+         curl -fsSL https://antigravity.google/cli/install.sh | bash
+         agy auth login
 
-    2. Custom /tumbledry:parse command registered:
-         mkdir -p ~/.gemini/commands/tumbledry
-         cp scripts/commands/parse.toml ~/.gemini/commands/tumbledry/parse.toml
+    2. Custom /tumbledry-parse skill registered globally:
+         # macOS / Linux / Windows (WSL)
+         mkdir -p ~/.gemini/antigravity-cli/skills/tumbledry-parse
+         cp scripts/skills/tumbledry-parse/SKILL.md ~/.gemini/antigravity-cli/skills/tumbledry-parse/SKILL.md
+
+         # Windows (PowerShell)
+         New-Item -ItemType Directory -Force "$env:USERPROFILE\.gemini\antigravity-cli\skills\tumbledry-parse"
+         Copy-Item scripts\skills\tumbledry-parse\SKILL.md "$env:USERPROFILE\.gemini\antigravity-cli\skills\tumbledry-parse\SKILL.md"
 
     3. Image files in .jpg, .jpeg, or .png format.
 
@@ -142,8 +147,12 @@ for file in "${FILES_TO_PROCESS[@]}"; do
     ((TOTAL_FILES++))
     echo "Parsing: $file"
 
-    # Run Gemini CLI and filter for commas, saving output to a variable
-    PARSED_DATA=$(gemini /tumbledry:parse "$file" | grep ",")
+    # Resolve the file path to an absolute path
+    ABS_FILE=$(realpath "$file")
+
+    # Run Antigravity CLI (agy) and filter for commas, saving output to a variable
+    # Stdin is redirected from /dev/null to prevent the CLI from hanging in headless scripts
+    PARSED_DATA=$(agy -p "/tumbledry-parse @$ABS_FILE" --dangerously-skip-permissions < /dev/null | grep ",")
 
     # Check if we got valid CSV data back
     if [ -z "$PARSED_DATA" ]; then

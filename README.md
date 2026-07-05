@@ -51,10 +51,12 @@ The reconciliation engine automatically flags discrepancies across the imported 
 - **Python 3.9+**
 - **pip** (comes with Python)
 - **Git** (for cloning)
-- **Gemini CLI** — required for OCR parsing of handwritten runner notepad photos (see [Runner Notepad: OCR Parsing Guide](#-runner-notepad-ocr-parsing-guide-sop))
+- **Antigravity CLI (agy)** — required for OCR parsing of handwritten runner notepad photos (see [Runner Notepad: OCR Parsing Guide](#-runner-notepad-ocr-parsing-guide-sop))
   ```bash
-  npm install -g @google/gemini-cli
-  gemini auth login
+  # Install Antigravity CLI
+  curl -fsSL https://antigravity.google/cli/install.sh | bash
+  # Authenticate
+  agy auth login
   ```
 
 ---
@@ -203,42 +205,40 @@ This section explains how to convert **handwritten runner delivery notepad photo
 
 ### Prerequisites
 
-1. **Gemini CLI** — must be installed and authenticated:
+1. **Antigravity CLI (agy)** — must be installed and authenticated:
    ```bash
-   # Install (if not already)
-   npm install -g @google/gemini-cli
+   # Install (macOS/Linux)
+   curl -fsSL https://antigravity.google/cli/install.sh | bash
+
+   # Install (Windows - PowerShell)
+   irm https://antigravity.google/cli/install.ps1 | iex
 
    # Authenticate
-   gemini auth login
+   agy auth login
    ```
 
-2. **Register the `/tumbledry:parse` custom command** — the parse script calls `gemini /tumbledry:parse` internally, which is a custom Gemini CLI command defined in `scripts/commands/parse.toml`. You must register it before running the script.
+2. **Register the `/tumbledry-parse` custom command globally** — the parse script calls `/tumbledry-parse` using the `agy` CLI. You must copy the skill definition to your global Antigravity CLI skills directory.
 
-   **What the command does:** Instructs Gemini to act as a structured data extraction assistant — reading handwriting from an image and returning only raw CSV rows (no headers, no commentary). It enforces date cascading so that a date written as a heading above multiple entries is applied to every row in that group.
+   **What the command does:** Instructs the AI agent to act as a structured data extraction assistant — reading handwriting from an image and returning only raw CSV rows (no headers, no commentary). It enforces date cascading so that a date written as a heading above multiple entries is applied to every row in that group.
 
-   **How to register it:** Copy `parse.toml` to your Gemini CLI custom commands directory:
+   **How to register it:** Copy `SKILL.md` to your global Antigravity CLI skills directory:
 
-   | OS | Commands directory |
-   |----|-------------------|
-   | macOS / Linux / Windows (WSL) | `~/.gemini/commands/tumbledry/` |
-   | Windows (Native) | `%APPDATA%\gemini\commands\tumbledry\` |
+   | OS | Skills directory |
+   |----|------------------|
+   | macOS / Linux / Windows (WSL) | `~/.gemini/antigravity-cli/skills/tumbledry-parse/` |
+   | Windows (Native) | `%USERPROFILE%\.gemini\antigravity-cli\skills\tumbledry-parse\` |
 
    ```bash
    # macOS / Linux / Windows (WSL)
-   mkdir -p ~/.gemini/commands/tumbledry
-   cp scripts/commands/parse.toml ~/.gemini/commands/tumbledry/parse.toml
+   mkdir -p ~/.gemini/antigravity-cli/skills/tumbledry-parse
+   cp scripts/skills/tumbledry-parse/SKILL.md ~/.gemini/antigravity-cli/skills/tumbledry-parse/SKILL.md
 
    # Windows (PowerShell)
-   New-Item -ItemType Directory -Force "$env:APPDATA\gemini\commands\tumbledry"
-   Copy-Item scripts\commands\parse.toml "$env:APPDATA\gemini\commands\tumbledry\parse.toml"
+   New-Item -ItemType Directory -Force "$env:USERPROFILE\.gemini\antigravity-cli\skills\tumbledry-parse"
+   Copy-Item scripts\skills\tumbledry-parse\SKILL.md "$env:USERPROFILE\.gemini\antigravity-cli\skills\tumbledry-parse\SKILL.md"
    ```
 
-   Verify registration:
-   ```bash
-   gemini /tumbledry:parse --help
-   ```
-
-3. **The parse script** — located at `scripts/parse_batch.sh`. On macOS/Linux, make it executable once:
+3. **The parse script** — located at `scripts/parse_batch.sh` for Linux/WSL/macOS or `scripts/parse_batch.ps1` for Windows PowerShell. For `parse_batch.sh`, make it executable once:
    ```bash
    chmod +x scripts/parse_batch.sh
    ```
@@ -251,22 +251,34 @@ This section explains how to convert **handwritten runner delivery notepad photo
 
 ### Step 1 — Parse Notepad Photos into CSV
 
-#### Single photo
+#### macOS / Linux / Windows (WSL)
 
+To parse a single photo:
 ```bash
 ./scripts/parse_batch.sh /path/to/notepad_page.jpg
 ```
 
-#### Batch — entire folder of photos
-
+To parse an entire folder of photos:
 ```bash
 ./scripts/parse_batch.sh /path/to/notepad_photos/
 ```
 
-The script will process every `.jpg`, `.jpeg`, and `.png` file in the folder.
+#### Windows (PowerShell)
+
+To parse a single photo:
+```powershell
+.\scripts\parse_batch.ps1 C:\path\to\notepad_page.jpg
+```
+
+To parse an entire folder of photos:
+```powershell
+.\scripts\parse_batch.ps1 C:\path\to\notepad_photos\
+```
+
+The script will process every `.jpg`, `.jpeg`, and `.png` file in the target path.
 
 **What happens internally:**
-- Each image is sent to Gemini AI (`gemini /tumbledry:parse`) which reads the handwriting and returns structured CSV rows.
+- Each image is sent to the Antigravity CLI (`agy -p "/tumbledry-parse @file"`) which loads the global skill, reads the handwriting, and returns structured CSV rows.
 - Rows are filtered and routed to **month-specific output files** based on the date in column 5.
 
 #### Output files
@@ -325,10 +337,10 @@ Open the generated CSV and sanity-check a few rows before uploading:
 
 | Problem | Likely Cause | Fix |
 |---------|-------------|-----|
-| `ERROR: Parsing failed or no valid data found` | Blurry/skewed photo, or Gemini CLI not authenticated | Re-shoot the photo clearer; run `gemini auth login` |
+| `ERROR: Parsing failed or no valid data found` | Blurry/skewed photo, or Antigravity CLI not authenticated | Re-shoot the photo clearer; run `agy auth login` |
 | File appears in `Delivery_notes_Unsorted.csv` | Date column (col 5) is missing or in unexpected format | Manually correct the date in the CSV and re-route to the correct monthly file |
 | Duplicate rows after re-running | Script **appends** to existing CSVs | Delete or archive old CSV files before re-running the script on the same images |
-| `gemini: command not found` | Gemini CLI not installed or not on PATH | Install via `npm install -g @google/gemini-cli` and restart terminal |
+| `agy: command not found` | Antigravity CLI not installed or not on PATH | Install using the install script and restart terminal |
 | Script won't run (`Permission denied`) | File not executable | Run `chmod +x scripts/parse_batch.sh` |
 
 ---
